@@ -34,7 +34,7 @@ uint8_t clockPin = 3;    // Green wire on Adafruit Pixels
 // and the +5V wire to a +5V supply
 
 // Set the first variable to the NUMBER of pixels. 25 = 25 pixels in a row
-Adafruit_WS2801 strip = Adafruit_WS2801(30, dataPin, clockPin);
+Adafruit_WS2801 strip = Adafruit_WS2801(50, dataPin, clockPin);
 
 // Optional: leave off pin numbers to use hardware SPI
 // (pinout is then specific to each board and can't be changed)
@@ -62,8 +62,8 @@ void loop() {
   // Some example procedures showing how to display to the pixels
   
   colorWipe(Color(255, 0, 0), 50);
-  colorWipe(Color(0, 255, 0), 50);
-  colorWipe(Color(0, 0, 255), 50);
+  colorWipe(Color(0, 0, 0), 50);
+  //colorWipe(Color(0, 0, 255), 50);
   //rainbow(20);
   //rainbowCycle(20);
 }
