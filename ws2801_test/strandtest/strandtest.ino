@@ -27,14 +27,14 @@ Example sketch for driving Adafruit WS2801 pixels!
 // Can be any valid output pins.
 // The colors of the wires may be totally different so
 // BE SURE TO CHECK YOUR PIXELS TO SEE WHICH WIRES TO USE!
-uint8_t dataPin  = 2;    // Yellow wire on Adafruit Pixels
-uint8_t clockPin = 3;    // Green wire on Adafruit Pixels
+uint8_t dataPin  = 3;    // Biały wire on Adafruit Pixels - PD3
+uint8_t clockPin = 9;    // Zielony wire on Adafruit Pixels - PB1
 
 // Don't forget to connect the ground wire to Arduino ground,
 // and the +5V wire to a +5V supply
 
 // Set the first variable to the NUMBER of pixels. 25 = 25 pixels in a row
-Adafruit_WS2801 strip = Adafruit_WS2801(50, dataPin, clockPin);
+Adafruit_WS2801 strip = Adafruit_WS2801(49, dataPin, clockPin);
 
 // Optional: leave off pin numbers to use hardware SPI
 // (pinout is then specific to each board and can't be changed)
@@ -63,16 +63,19 @@ void loop() {
   
   colorWipe(Color(255, 0, 0), 50);
   colorWipe(Color(0, 0, 0), 50);
-  //colorWipe(Color(0, 0, 255), 50);
-  //rainbow(20);
-  //rainbowCycle(20);
+  colorWipe(Color(0, 255, 0), 50);
+  colorWipe(Color(0, 0, 0), 50);
+  colorWipe(Color(0, 0, 255), 50);
+  colorWipe(Color(0, 0, 0), 50);
+  rainbow(20);
+  rainbowCycle(20);
 }
 
 void rainbow(uint8_t wait) {
   int i, j;
    
   for (j=0; j < 256; j++) {     // 3 cycles of all 256 colors in the wheel
-    for (i=0; i < strip.numPixels(); i++) {
+    for (i=strip.numPixels()-1; i >=0 ; i--) {
       strip.setPixelColor(i, Wheel( (i + j) % 255));
     }  
     strip.show();   // write all the pixels out
@@ -103,7 +106,7 @@ void rainbowCycle(uint8_t wait) {
 void colorWipe(uint32_t c, uint8_t wait) {
   int i;
   
-  for (i=0; i < strip.numPixels(); i++) {
+  for (i=strip.numPixels()-1; i >=0 ; i--) {
       strip.setPixelColor(i, c);
       strip.show();
       delay(wait);
