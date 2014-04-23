@@ -95,7 +95,7 @@ void setup(void)
   // optionally, reduce the payload size.  seems to
   // improve reliability
   //radio.setPayloadSize(8);
- radio.setPALevel(RF24_PA_LOW);
+ radio.setPALevel(RF24_PA_MAX);
  radio.setChannel(0x4c);
 
   //
