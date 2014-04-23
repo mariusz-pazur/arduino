@@ -55,7 +55,7 @@ void loop(void)
       
     printf("Now sending %d...",commands[commandToSend]);
     uint8_t commandLength = sizeof(int);
-    bool ok = radio.write( commands[commandToSend], commandLength );
+    bool ok = radio.write( &commands[commandToSend], commandLength );
     
     if (ok)
       printf("ok...");
