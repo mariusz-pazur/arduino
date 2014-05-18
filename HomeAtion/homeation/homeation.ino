@@ -13,7 +13,7 @@ byte commandToSend[3];
 
 EthernetServer server(80);
 IPAddress localIP(192,168,0,6);
-char requestLine[50];
+char requestLine[100];
 int requestLinePos = 0;
 
 void setup() {
@@ -79,60 +79,28 @@ int sendRFCommand(byte* commandArray)
     return response;
 }
 
-byte* getCommandFromQuery(char* requestLine, int requestLineLength)
-{    
-    byte commandArray[3];
+boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* commands)
+{        
     int parameterNumber = 0;    
     for (int i = 0; i < requestLineLength; i++)
     {
       char ch = requestLine[i];
       if (ch == '=')
       {
-        commandArray[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
+        commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
         parameterNumber++;
       }
     }
-        
-    /*int qsParamStart = requestLine.indexOf("id=");
-    int qsParamEnd = 0;
-    Serial.println("RequestLine " + requestLine);
-    //printf("start=%d;end=%d;id=%d", qsParamStart, qsParamEnd, commandArray[0]);
-    if (qsParamStart != -1)
+    if (parameterNumber == 3)
     {
-      qsParamEnd = requestLine.indexOf("&", qsParamStart);    
-      if (qsParamEnd == -1)
-        commandArray[0] = (byte)(requestLine.substring(qsParamStart+3).toInt());
-      else
-        commandArray[0] = (byte)(requestLine.substring(qsParamStart+3, qsParamEnd).toInt());  
-    }  
-    else
-     return NULL; 
-    
-    qsParamStart = requestLine.indexOf("cmd=");
-    if (qsParamStart != -1)
-    {
-      qsParamEnd = requestLine.indexOf("&", qsParamStart);
-      if (qsParamEnd == -1)
-        commandArray[1] = (byte)(requestLine.substring(qsParamStart+4).toInt());
-      else
-        commandArray[1] = (byte)(requestLine.substring(qsParamStart+4, qsParamEnd).toInt());     
+      printf("id=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2]);
+      return true;      
     }
     else
-      return NULL;
-    //printf("qsParamStart=%d;qsParamEnd=%d;command=%d", qsParamStart, qsParamEnd, commandArray[1]); 
-    qsParamStart = requestLine.indexOf("param=");
-    if (qsParamStart != -1)
     {
-      qsParamEnd = requestLine.indexOf("&", qsParamStart);
-      if (qsParamEnd == -1)
-        commandArray[2] = (byte)(requestLine.substring(qsParamStart+6).toInt());
-      else
-        commandArray[2] = (byte)(requestLine.substring(qsParamStart+6, qsParamEnd).toInt());     
-    }
-    else
-      return NULL;
-    //printf("qsParamStart=%d;qsParamEnd=%d;parameter=%d", qsParamStart, qsParamEnd, commandArray[2]);*/
-    return commandArray;
+      printf("no params\n\r");
+      return false;
+    }                    
 }
 
 void loop() {
@@ -144,31 +112,35 @@ void loop() {
     
     // an http request ends with a blank line
     boolean currentLineIsBlank = true;
+    boolean isFirstLine = true;
     while (client.connected()) {
       if (client.available()) {
-        char c = client.read();        
-        requestLine[requestLinePos] = c;
-        requestLinePos++;
+        char c = client.read();    
+        if (isFirstLine && requestLinePos < 99)
+        {    
+          requestLine[requestLinePos] = c;
+          requestLinePos++;
+        }
         // if you've gotten to the end of the line (received a newline
         // character) and the line is blank, the http request has ended,
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {         
           requestLine[requestLinePos] = '\0';
-           printf(requestLine);
+          printf(requestLine);
           // send a standard http response header
-          byte* command = getCommandFromQuery(requestLine, requestLinePos);
-          //if (command)
-            //response = sendRFCommand(command);          
-          //Serial.println(requestLine);        
+          byte commands[3];
+          boolean hasParameters = getCommandFromQuery(requestLine, requestLinePos, commands);
+          if (hasParameters)
+            response = sendRFCommand(commands);                         
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: text/html");
           client.println("Connection: close");  // the connection will be closed after completion of the response	  
           client.println();
           client.println("<!DOCTYPE HTML>");
           client.println("<html><body>"); 
-          for (int j = 1; j <= 4; j++)
+          for (int j = 0; j < 4; j++)
           { 
-            client.print(j);
+            client.print(j+1);
             for (int i = 0; i < 4; i++)
             {              
               client.print("- <a href=\"http://");
@@ -181,7 +153,7 @@ void loop() {
               client.print(i);              
               client.println("</a> ");                        
             }
-            if (command && command[2] == j)
+            if (hasParameters && commands[2] == j)
             {
               client.print("Status ");
               client.print(j);
@@ -190,12 +162,13 @@ void loop() {
             client.println("<br/>");
           }
           
-          client.println("</body></html>");
+          client.println("</body></html>");          
           break;
         }
         if (c == '\n') {
           // you're starting a new line
           currentLineIsBlank = true;
+          isFirstLine = false;
         } 
         else if (c != '\r') {
           // you've gotten a character on the current line
@@ -206,7 +179,8 @@ void loop() {
     // give the web browser time to receive the data
     delay(1);
     // close the connection:
-    client.stop();        
+    client.stop();  
+    requestLinePos = 0;    
     Serial.println("client disonnected");        
   }
 }

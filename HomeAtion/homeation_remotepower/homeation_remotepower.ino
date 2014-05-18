@@ -91,7 +91,7 @@ void loop(void)
       // Send the final one back. This way, we don't delay
       // the reply while we wait on serial i/o.
       radio.write( &response, sizeof(int) );
-      printf("Sent response %d\n\r", command);
+      printf("Sent response %d\n\r", response);
 
       // Now, resume listening so we catch the next packets.
       radio.startListening();
