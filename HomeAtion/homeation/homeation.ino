@@ -3,80 +3,94 @@
 #include <RF24.h>
 #include "printf.h"
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-
+#define HOME_ATION_DEBUG 1
 
 RF24 radio(7,8);
 const uint64_t remoteAddress = 0xF0F0F0F0D2LL;
 const uint64_t myAddress = 0xF0F0F0F0E1LL;
 byte commandToSend[3];
 
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 EthernetServer server(80);
 IPAddress localIP(192,168,0,6);
 char requestLine[100];
 int requestLinePos = 0;
 
-void setup() {
+void setup() 
+{
+#ifdef HOME_ATION_DEBUG
   Serial.begin(57600);  
-  Ethernet.begin(mac,localIP);
-  server.begin();
-  Serial.print("Server is at ");
-  Serial.println(localIP);
   printf_begin();
+#endif
+  setupEthernet();
+  setupRF();
+#ifdef HOME_ATION_DEBUG
   printf("HomeAtion Main\n\r");
-  radio.begin();
-  radio.setPALevel(RF24_PA_MAX);
-  radio.setChannel(0x4c);
-  radio.openWritingPipe(myAddress);
-  radio.openReadingPipe(1,remoteAddress);
-  radio.enableDynamicPayloads() ;
-  radio.setAutoAck( true ) ;
-  radio.powerUp() ;
-  radio.startListening();
-  radio.printDetails();
+  printf("Server is at %d.%d.%d.%d\n\r", localIP[0], localIP[1], localIP[2], localIP[3]);  
+#endif
+}
+
+void setupRF()
+{
+	radio.begin();
+	radio.setPALevel(RF24_PA_MAX);
+	radio.setChannel(0x4c);
+	radio.openWritingPipe(myAddress);
+	radio.openReadingPipe(1,remoteAddress);
+	radio.enableDynamicPayloads() ;
+	radio.setAutoAck(true) ;
+	radio.powerUp() ; 
+#ifdef HOME_ATION_DEBUG
+	radio.printDetails();
+#endif
+}
+
+void setupEthernet()
+{
+	Ethernet.begin(mac,localIP);
+	server.begin();
 }
 
 //commandArray[0] - id - 1 - RemotePower
 //commandArray[1] - cmd - 0 - enable - commandArray[2] - param - 0-3 (numer portu)
 //        - 1 - disable - j.w.
 //        - 2 - switch - j.w.
-//        - 3 - read - j.w.
-int sendRFCommand(byte* commandArray)
-{
-    int response;
-    // First, stop listening so we can talk.
-    radio.stopListening(); 
+//        - 3 - read all
+//		  - 4 - enable all
+//		  - 5 - disable all
+boolean sendRFCommand(byte* commandArray, uint8_t* response)
+{    
+    // First, stop listening so we can talk.    
+#ifdef HOME_ATION_DEBUG
     printf("Now sending (%d-%d-%d)", commandArray[0], commandArray[1], commandArray[2]);
+#endif
     bool ok = radio.write(commandArray, 3);
-    
-    if (ok)
-      printf("ok...");
-    else
-      printf("failed.\n\r");
-
-    // Now, continue listening
     radio.startListening();
+    if (ok)
+	{
+		// Wait here until we get a response, or timeout (250ms)
+		unsigned long started_waiting_at = millis();
+		bool timeout = false;
+		while ( ! radio.available() && ! timeout )
+		  if (millis() - started_waiting_at > 1+(radio.getMaxTimeout()/1000) )
+			timeout = true;
 
-    // Wait here until we get a response, or timeout (250ms)
-    unsigned long started_waiting_at = millis();
-    bool timeout = false;
-    while ( ! radio.available() && ! timeout )
-      if (millis() - started_waiting_at > 1+(radio.getMaxTimeout()/1000) )
-        timeout = true;
-
-    // Describe the results
-    if ( timeout )
-    {
-      printf("Failed, response timed out.\n\r");
-      printf("Timeout duration: %d\n\r", (1+radio.getMaxTimeout()/1000) ) ;
-    }
-    else
-    {
-      radio.read( &response, sizeof(int) );
-      // Spew it
-      printf("Got response %d\n\r",response);
-    }
-    return response;
+		// Describe the results
+		if (!timeout)		
+		{
+		  if (commandArray[0] == 1)//Remote Power Strip
+		  {
+			radio.read(response, 4*sizeof(uint8_t) );
+			// Spew it
+#ifdef HOME_ATION_DEBUG
+			printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
+#endif
+		  }
+		  return true;
+		}  
+	}
+	radio.stopListening();
+	return false;
 }
 
 boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* commands)
@@ -93,23 +107,30 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
     }
     if (parameterNumber == 3)
     {
+#ifdef HOME_ATION_DEBUG
       printf("id=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2]);
+#endif
       return true;      
     }
     else
     {
+#ifdef HOME_ATION_DEBUG
       printf("no params\n\r");
+#endif
       return false;
     }                    
 }
 
-void loop() {
+void loop() 
+{
   // listen for incoming clients
   EthernetClient client = server.available();
-  int response = -1;
+  uint8_t response[4];
+  boolean hasCommandSend = false;
   if (client) {
-    Serial.println("new client");
-    
+#ifdef HOME_ATION_DEBUG
+    printf("new client\n\r");
+#endif
     // an http request ends with a blank line
     boolean currentLineIsBlank = true;
     boolean isFirstLine = true;
@@ -126,18 +147,20 @@ void loop() {
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {         
           requestLine[requestLinePos] = '\0';
+#ifdef HOME_ATION_DEBUG
           printf(requestLine);
-          // send a standard http response header
+#endif
           byte commands[3];
           boolean hasParameters = getCommandFromQuery(requestLine, requestLinePos, commands);
           if (hasParameters)
-            response = sendRFCommand(commands);                         
+            hasCommandSend = sendRFCommand(commands, response);    
+		  // send a standard http response header
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: text/html");
           client.println("Connection: close");  // the connection will be closed after completion of the response	  
           client.println();
           client.println("<!DOCTYPE HTML>");
-          client.println("<html><body>"); 
+          client.println("<html><body>"); 		  
           for (int j = 0; j < 4; j++)
           { 
             client.print(j+1);
@@ -153,15 +176,15 @@ void loop() {
               client.print(i);              
               client.println("</a> ");                        
             }
-            if (hasParameters && commands[2] == j)
-            {
-              client.print("Status ");
-              client.print(j);
-              client.println(" - " + response);
-            }
+            client.print("State - ");  
+			if (response[j] == LOW)
+				client.println("ON");            
+			else
+				client.println("OFF");
             client.println("<br/>");
           }
-          
+          if (!hasCommandSend)
+			  client.println("Error during radio send");
           client.println("</body></html>");          
           break;
         }
@@ -180,8 +203,10 @@ void loop() {
     delay(1);
     // close the connection:
     client.stop();  
-    requestLinePos = 0;    
-    Serial.println("client disonnected");        
+    requestLinePos = 0;   
+#ifdef HOME_ATION_DEBUG
+    printf("client disconnected\n\r");        
+#endif
   }
 }
 
