@@ -12,7 +12,11 @@ byte commandToSend[3];
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 EthernetServer server(80);
+#ifdef HOME_ATION_DEBUG
 IPAddress localIP(192,168,0,6);
+#else
+IPAddress localIP;
+#endif
 char requestLine[100];
 int requestLinePos = 0;
 
@@ -47,8 +51,13 @@ void setupRF()
 
 void setupEthernet()
 {
-	Ethernet.begin(mac,localIP);
-	server.begin();
+#ifdef HOME_ATION_DEBUG
+  Ethernet.begin(mac, localIP);
+#else
+  Ethernet.begin(mac);
+  localIP = Ethernet.localIP();
+#endif
+  server.begin();
 }
 
 //commandArray[0] - id - 1 - RemotePower
@@ -152,8 +161,12 @@ void loop()
 #endif
           byte commands[3];
           boolean hasParameters = getCommandFromQuery(requestLine, requestLinePos, commands);
-          if (hasParameters)
+          int numberOfRetries = 3;
+          while(hasParameters && !hasCommandSend && numberOfRetries > 0)
+          {
+            numberOfRetries--;
             hasCommandSend = sendRFCommand(commands, response);    
+          }
 		  // send a standard http response header
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: text/html");
@@ -164,7 +177,7 @@ void loop()
           for (int j = 0; j < 4; j++)
           { 
             client.print(j+1);
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 6; i++)
             {              
               client.print("- <a href=\"http://");
               client.print(localIP);
