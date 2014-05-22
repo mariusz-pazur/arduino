@@ -14,7 +14,7 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 byte localIP = { 192, 168, 0, 6 };
 byte Ethernet::buffer[500];
 BufferFiller bfill;
-#ifdef HOME_ATION_DEBUG
+#if HOME_ATION_DEBUG
 IPAddress localIP(192,168,0,6);
 #else
 IPAddress localIP;
