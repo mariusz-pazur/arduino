@@ -36,13 +36,13 @@ LiquidCrystal lcd(12,11,5,4,3,2);
 void setup() 
 {
 #if HOME_ATION_DEBUG
-	Serial.begin(57600);  
-	printf_begin();
+  Serial.begin(57600);  
+  printf_begin();
 #endif
-	setupEthernet();
-	setupRF();
+  setupEthernet();
+  setupRF();
 #if HOME_ATION_DEBUG
-	printf("HomeAtion Main\n\r");
+  printf("HomeAtion Main\n\r");
 	printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
 #endif
   lcd.begin(16, 2);
@@ -100,33 +100,33 @@ void setupEthernet()
 //		  - 5 - disable all
 boolean sendRFCommand(byte* commandArray, uint8_t* response)
 {    
-	// First, stop listening so we can talk.    
+    // First, stop listening so we can talk.    
 #ifdef HOME_ATION_DEBUG
-	printf("Now sending (%d-%d-%d)", commandArray[0], commandArray[1], commandArray[2]);
+    printf("Now sending (%d-%d-%d)", commandArray[0], commandArray[1], commandArray[2]);
 #endif
-	bool ok = radio.write(commandArray, 3);
-	radio.startListening();
-	if (ok)
+    bool ok = radio.write(commandArray, 3);
+    radio.startListening();
+    if (ok)
 	{
 		// Wait here until we get a response, or timeout (250ms)
 		unsigned long started_waiting_at = millis();
 		bool timeout = false;
 		while ( ! radio.available() && ! timeout )
-			if (millis() - started_waiting_at > 1+(radio.getMaxTimeout()/1000) )
-				timeout = true;
+		  if (millis() - started_waiting_at > 1+(radio.getMaxTimeout()/1000) )
+			timeout = true;
 
 		// Describe the results
 		if (!timeout)		
 		{
-			if (commandArray[0] == 1)//Remote Power Strip
-			{
-				radio.read(response, 4*sizeof(uint8_t) );
-				// Spew it
+		  if (commandArray[0] == 1)//Remote Power Strip
+		  {
+			radio.read(response, 4*sizeof(uint8_t) );
+			// Spew it
 #ifdef HOME_ATION_DEBUG
-				printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
+			printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
 #endif
-			}
-			return true;
+		  }
+		  return true;
 		}  
 	}
 	radio.stopListening();
@@ -135,30 +135,30 @@ boolean sendRFCommand(byte* commandArray, uint8_t* response)
 
 boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* commands)
 {        
-	int parameterNumber = 0;    
-	for (int i = 0; i < requestLineLength; i++)
-	{
-		char ch = requestLine[i];
-		if (ch == '=')
-		{
-			commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
-			parameterNumber++;
-		}
-	}
-	if (parameterNumber == 3)
-	{
+    int parameterNumber = 0;    
+    for (int i = 0; i < requestLineLength; i++)
+    {
+      char ch = requestLine[i];
+      if (ch == '=')
+      {
+        commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
+        parameterNumber++;
+      }
+    }
+    if (parameterNumber == 3)
+    {
 #ifdef HOME_ATION_DEBUG
-		printf("id=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2]);
+      printf("id=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2]);
 #endif
-		return true;      
-	}
-	else
-	{
+      return true;      
+    }
+    else
+    {
 #ifdef HOME_ATION_DEBUG
-		printf("no params\n\r");
+      printf("no params\n\r");
 #endif
-		return false;
-	}                    
+      return false;
+    }                    
 }
 
 void homePage(uint8_t* response) 
@@ -176,28 +176,28 @@ void homePage(uint8_t* response)
 }
 
 void loop() 
-{	
-	uint8_t response[4];
-	boolean hasCommandSend = false;
+{
+  uint8_t response[4];
+  boolean hasCommandSend = false;
 	word len = ether.packetReceive();
 	word pos = ether.packetLoop(len); 
 	if (pos) 
 	{
 #ifdef HOME_ATION_DEBUG
-		printf("new client\n\r");
+    printf("new client\n\r");
 #endif
 		bfill = ether.tcpOffset();
 		char *data = (char *) Ethernet::buffer + pos;				
-		byte commands[3];
+          byte commands[3];
 		boolean hasParameters = getCommandFromQuery(data, len, commands);
-		int numberOfRetries = 3;
-		while(hasParameters && !hasCommandSend && numberOfRetries > 0)
-		{
-			numberOfRetries--;
-			hasCommandSend = sendRFCommand(commands, response);    
-		}
+          int numberOfRetries = 3;
+          while(hasParameters && !hasCommandSend && numberOfRetries > 0)
+          {
+            numberOfRetries--;
+            hasCommandSend = sendRFCommand(commands, response);    
+          }
 		homePage(response);	
 		ether.httpServerReply(bfill.position());
-	}	
-}
+      }
+    }
 
