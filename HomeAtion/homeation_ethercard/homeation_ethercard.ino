@@ -1,13 +1,13 @@
 #include <EtherCard.h>
 #include <SPI.h>
 #include <RF24.h>
-#include <LiquidCrystal.h>
+//#include <LiquidCrystal.h>
 #include "printf.h"
 
-#define STATIC 0
+#define STATIC 1
 #define HOME_ATION_DEBUG 1
 
-RF24 radio(7,8);
+RF24 radio(7,6);
 const uint64_t remoteAddress = 0xF0F0F0F0D2LL;
 const uint64_t myAddress = 0xF0F0F0F0E1LL;
 byte commandToSend[3];
@@ -31,7 +31,7 @@ const char http_OK[] PROGMEM =
 "Connection: close\r\n"
 "Pragma: no-cache\r\n\r\n";
 
-LiquidCrystal lcd(12,11,5,4,3,2);
+//LiquidCrystal lcd(12,11,5,4,3,2);
 
 void setup() 
 {
@@ -39,13 +39,13 @@ void setup()
   Serial.begin(57600);  
   printf_begin();
 #endif
-  setupEthernet();
-  setupRF();
+  setupEthernet();  
+  setupRF();  
 #if HOME_ATION_DEBUG
   printf("HomeAtion Main\n\r");
 	printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
 #endif
-  lcd.begin(16, 2);
+  /*lcd.begin(16, 2);
   lcd.clear();
   lcd.print(ether.myip[0]);
   lcd.print('.');
@@ -53,7 +53,7 @@ void setup()
   lcd.print('.');
   lcd.print(ether.myip[2]);
   lcd.print('.');
-  lcd.print(ether.myip[3]);  
+  lcd.print(ether.myip[3]);*/
 }
 
 void setupRF()

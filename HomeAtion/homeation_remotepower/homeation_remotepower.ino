@@ -15,7 +15,7 @@ uint8_t socketPinsState[] = {
 
 void setup(void)
 {
-#ifdef HA_REMOTE_POWER_DEBUG
+#if HA_REMOTE_POWER_DEBUG
   Serial.begin(57600);
   printf_begin();
   printf("HomeAtion Remote Power Strip\n\r");
@@ -35,7 +35,7 @@ void setupRF(void)
   radio.setAutoAck( true ) ;
   radio.powerUp() ;
   radio.startListening();
-#ifdef HA_REMOTE_POWER_DEBUG
+#if HA_REMOTE_POWER_DEBUG
   radio.printDetails();
 #endif
 }
@@ -62,7 +62,7 @@ void loop(void)
       // Fetch the payload, and see if this was the last one.
       done = radio.read( command, 3 );
     }      
-#ifdef HA_REMOTE_POWER_DEBUG
+#if HA_REMOTE_POWER_DEBUG
     printf("Read command from radio {%d,%d,%d}\n\r", command[0],command[1],command[2]);
 #endif
     // First, stop listening so we can talk
@@ -115,7 +115,7 @@ void loop(void)
       }
     }        
     radio.write(socketPinsState, 4*sizeof(uint8_t));
-#ifdef HA_REMOTE_POWER_DEBUG
+#if HA_REMOTE_POWER_DEBUG
     printf("Sent state response {%d,%d,%d,%d}\n\r", socketPinsState[0],socketPinsState[1],socketPinsState[2],socketPinsState[3]);
 #endif
     // Now, resume listening so we catch the next packets.
