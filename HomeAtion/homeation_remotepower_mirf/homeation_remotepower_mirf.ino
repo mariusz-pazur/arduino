@@ -3,6 +3,7 @@
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 #include "printf.h"
+#include "hardware.h"
 
 static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
@@ -20,7 +21,10 @@ void setup(void)
   printf("HomeAtion Remote Power Strip\n\r");
 #endif
   setupRF();
-  setupRelay();  
+  setupRelay(); 
+#if HA_REMOTE_POWER_DEBUG
+  printf("Free RAM: %d B\n\r", freeRam()); 
+#endif
 }
 
 void setupRF(void)
@@ -78,7 +82,7 @@ void loop(void)
         else
         {
           digitalWrite(socketPins[command[2]], LOW); 
-          socketPinsState[command[2]] = HIGH;         
+          socketPinsState[command[2]] = LOW;         
         }
       } 
       else if (command[1] == 3)//read

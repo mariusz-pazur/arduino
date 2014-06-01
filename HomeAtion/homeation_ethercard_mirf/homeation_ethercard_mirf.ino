@@ -5,6 +5,7 @@
 #include <MirfHardwareSpiDriver.h>
 //#include <LiquidCrystal.h>
 #include "printf.h"
+#include "hardware.h"
 
 #define STATIC 1
 #define HOME_ATION_DEBUG 1
@@ -59,9 +60,10 @@ void setup()
    lcd.print('.');
    lcd.print(ether.myip[2]);
    lcd.print('.');
-   lcd.print(ether.myip[3]);*/
-   Serial.println("\n[memCheck]");
-   Serial.println(freeRam());
+   lcd.print(ether.myip[3]);*/  
+#if HOME_ATION_DEBUG 
+   printf("Free RAM: %d B\n\r", freeRam());     
+#endif
 }
 
 void setupRF()
@@ -118,7 +120,7 @@ boolean sendRFCommand(byte* commandArray, uint8_t* response)
   unsigned long started_waiting_at = millis();
   while(!Mirf.dataReady())
   {    
-    if ( ( millis() - started_waiting_at ) > 1000 ) 
+    if ( ( millis() - started_waiting_at ) > 5000 ) 
     {
 #if HOME_ATION_DEBUG
       printf("Timeout on response from server!");
@@ -147,6 +149,8 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
       commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
       parameterNumber++;
     }
+    if (ch == '\n')
+      break;
   }
   if (parameterNumber == 3)
   {
@@ -166,37 +170,44 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
 
 void homePage(uint8_t* response) 
 {
-  bfill.emit_p(PSTR("$F"    
+#ifdef HOME_ATION_DEBUG
+  printf("home page before emit\n\r");
+#endif
+  /*bfill.emit_p(PSTR("$F"    
     "1 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=0\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=0\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=0\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=0\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=0\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=0\">Disable all</a> State - $S" 
     "2 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=1\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=1\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=1\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=1\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=1\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=1\">Disable all</a> State - $S"  
     "3 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=2\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=2\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=2\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=2\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=2\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=2\">Disable all</a> State - $S"  
     "4 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=3\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=3\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=3\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=3\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=3\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=3\">Disable all</a> State - $S" ),
   http_OK,
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[0] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[1] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[2] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[3] == 0 ? "OFF" : "ON"); 
-}
-
-int freeRam () {
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[0] == 0 ? "OFF" : "ON",
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[1] == 0 ? "OFF" : "ON",
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[2] == 0 ? "OFF" : "ON",
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
+  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[3] == 0 ? "OFF" : "ON"); */
+  bfill.emit_p(http_OK);
+#ifdef HOME_ATION_DEBUG
+  printf("home page after emit\n\r");
+#endif
 }
 
 void loop() 
 {
-  uint8_t response[4];
+  uint8_t response[] = {0, 0, 0, 0};
   boolean hasCommandSend = false;
   word len = ether.packetReceive();
   word pos = ether.packetLoop(len); 
   if (pos) 
   {
+    delay(1);
 #ifdef HOME_ATION_DEBUG
-    printf("new client\n\r");
+    printf("new client start\n\r");
 #endif
     bfill = ether.tcpOffset();
-    char *data = (char *) Ethernet::buffer + pos;				
+    char *data = (char *) Ethernet::buffer + pos;
+    printf(data);				
     byte commands[3];
     boolean hasParameters = getCommandFromQuery(data, len, commands);
     int numberOfRetries = 3;
@@ -207,6 +218,9 @@ void loop()
     }
     homePage(response);	
     ether.httpServerReply(bfill.position());
+#ifdef HOME_ATION_DEBUG
+    printf("new client end\n\r");
+#endif
   }
 }
 
