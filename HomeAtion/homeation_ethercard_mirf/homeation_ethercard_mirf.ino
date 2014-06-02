@@ -28,9 +28,15 @@ static byte mymac[] = {
 byte Ethernet::buffer[500]; // tcp/ip send and receive buffer
 BufferFiller bfill;
 
+//{ "addr":"F0F0...", "type":1, "state": [ 220, 130, 0, 1] } 
+const char deviceJson[] PROGMEM = 
+"{\"addr\":\"$D$D$D$D$D\",\"type\":$D,\"state\":[$D,$D,$D,$D]}";
+//{ "devices":[ {"addr":"F0F0...", "type":1}, {"addr":"F0F0...", "type":2}, ...] }
+const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
+const char devicesJsonEnd[] PROGMEM = "]}";
 const char http_OK[] PROGMEM =
 "HTTP/1.1 200 OK\r\n"
-"Content-Type: text/html\r\n"
+"Content-Type: application/json\r\n"
 "Connection: close\r\n"
 "Pragma: no-cache\r\n\r\n";
 
@@ -164,26 +170,15 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
   }                    
 }
 
-void homePage(uint8_t* response) 
+void homePage(byte* address, int type, uint8_t* response) 
 {
 #ifdef HOME_ATION_DEBUG
   printf("home page before emit\n\r");
-#endif
-  /*bfill.emit_p(PSTR("$F"    
-    "1 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=0\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=0\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=0\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=0\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=0\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=0\">Disable all</a> State - $S" 
-    "2 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=1\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=1\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=1\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=1\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=1\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=1\">Disable all</a> State - $S"  
-    "3 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=2\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=2\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=2\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=2\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=2\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=2\">Disable all</a> State - $S"  
-    "4 - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=0&param=3\">Enable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=1&param=3\">Disable</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=2&param=3\">Switch</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=3&param=3\">Read</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=4&param=3\">Enable all</a> - <a href=\"http://$D.$D.$D.$D/?id=1&cmd=5&param=3\">Disable all</a> State - $S" ),
-  http_OK,
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[0] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[1] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[2] == 0 ? "OFF" : "ON",
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],
-  ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3],ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3], response[3] == 0 ? "OFF" : "ON"); */
+#endif  
   bfill.emit_p(http_OK);
+  bfill.emit_p(devicesJsonStart);
+  bfill.emit_p(deviceJson, address[0], address[1], address[2], address[3], address[4], type, response[0], response[1], response[2], response[3]);
+  bfill.emit_p(devicesJsonEnd);
 #ifdef HOME_ATION_DEBUG
   printf("home page after emit\n\r");
 #endif
@@ -214,7 +209,7 @@ void loop()
       numberOfRetries--;
       hasCommandSend = sendRFCommand(commands, response);    
     }
-    homePage(response);	
+    homePage(remoteAddress, commands[0], response);	
     ether.httpServerReply(bfill.position());
 #ifdef HOME_ATION_DEBUG
     printf("new client end\n\r");
