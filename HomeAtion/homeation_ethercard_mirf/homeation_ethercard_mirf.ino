@@ -18,11 +18,7 @@ byte commandToSend[4];
 
 #if STATIC
 // ethernet interface ip address
-static byte myip[] = { 
-  192,168,0,6 };
-// gateway ip address
-static byte gwip[] = { 
-  192,168,0,1 };
+static byte myip[] = { 192,168,0,6 };
 #endif
 
 // ethernet mac address - must be unique on your network
@@ -73,6 +69,7 @@ void setupRF()
   Mirf.spi = &MirfHardwareSpi;
   Mirf.init();
   Mirf.setRADDR(myAddress);
+  Mirf.setTADDR(remoteAddress);
   Mirf.payload = 4;
   Mirf.channel = 76;
   Mirf.config(); 
@@ -87,7 +84,7 @@ void setupEthernet()
 #endif
   }
 #if STATIC
-  ether.staticSetup(myip, gwip);
+  ether.staticSetup(myip);
 #else
   if (!ether.dhcpSetup())
   {
@@ -110,8 +107,7 @@ boolean sendRFCommand(byte* commandArray, uint8_t* response)
   // First, stop listening so we can talk.    
 #ifdef HOME_ATION_DEBUG
   printf("Now sending (%d-%d-%d)", commandArray[0], commandArray[1], commandArray[2]);
-#endif
-  Mirf.setTADDR(remoteAddress);
+#endif  
   Mirf.send(commandArray);
   while(Mirf.isSending())
   {
@@ -207,7 +203,9 @@ void loop()
 #endif
     bfill = ether.tcpOffset();
     char *data = (char *) Ethernet::buffer + pos;
-    printf(data);				
+#ifdef HOME_ATION_DEBUG
+    printf(data);		
+#endif
     byte commands[3];
     boolean hasParameters = getCommandFromQuery(data, len, commands);
     int numberOfRetries = 3;
