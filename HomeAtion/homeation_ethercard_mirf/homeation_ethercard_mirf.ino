@@ -10,35 +10,46 @@
 #define STATIC 1
 #define HOME_ATION_DEBUG 1
 
-static uint8_t remoteAddress[] =  {
-  0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
-static uint8_t myAddress[] = {
-  0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
-byte commandToSend[4];
+struct RemoteDevice {
+	uint8_t deviceAddress[5];
+	uint8_t deviceType;
+	uint8_t deviceReadStateCommand[4];
+};
+static RemoteDevice remoteDevices[] = 
+{ 
+	{ {0xF0, 0xF0, 0xF0, 0xF0, 0xD2}, 1, {0, 1, 3, 0} } 
+};
+static uint8_t myAddress[] = { 0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
+static uint8_t rf24cePin = 7;
+static uint8_t rf24csnPin = 8;
 
 #if STATIC
-// ethernet interface ip address
 static byte myip[] = { 192,168,0,6 };
 #endif
-
-// ethernet mac address - must be unique on your network
-static byte mymac[] = { 
-  0x74,0x69,0x69,0x2D,0x30,0x31 };
-
-byte Ethernet::buffer[500]; // tcp/ip send and receive buffer
+static byte mymac[] = { 0x74,0x69,0x69,0x2D,0x30,0x31 };
+byte Ethernet::buffer[500]; 
 BufferFiller bfill;
+static uint8_t ethernetcsPin = 10;
 
-//{ "addr":"F0F0...", "type":1, "state": [ 220, 130, 0, 1] } 
-const char deviceJson[] PROGMEM = 
-"{\"addr\":\"$D$D$D$D$D\",\"type\":$D,\"state\":[$D,$D,$D,$D]}";
-//{ "devices":[ {"addr":"F0F0...", "type":1}, {"addr":"F0F0...", "type":2}, ...] }
+const char deviceJson[] PROGMEM = "{\"id\":\"$D\",\"type\":$D,\"state\":[$D,$D,$D,$D]}";
 const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
 const char devicesJsonEnd[] PROGMEM = "]}";
-const char http_OK[] PROGMEM =
+const char httpOkHeaders[] PROGMEM =
 "HTTP/1.1 200 OK\r\n"
 "Content-Type: application/json\r\n"
 "Connection: close\r\n"
 "Pragma: no-cache\r\n\r\n";
+
+const char httpErrorHeaders[] PROGMEM =
+"HTTP/1.1 500 Error\r\n"
+"Content-Type: application/json\r\n"
+"Connection: close\r\n"
+"Pragma: no-cache\r\n\r\n"
+"{\"message\":\"$F\"}";
+
+const char commandErrorInfo[] PROGMEM = 
+	"Error during command send";
+const char echoText[] PROGMEM = "HomeAtionMain";
 
 //LiquidCrystal lcd(12,11,5,4,3,2);
 
@@ -70,12 +81,11 @@ void setup()
 
 void setupRF()
 {
-  Mirf.cePin = 7;
-  Mirf.csnPin = 8;
+  Mirf.cePin = rf24cePin;
+  Mirf.csnPin = rf24csnPin;
   Mirf.spi = &MirfHardwareSpi;
   Mirf.init();
-  Mirf.setRADDR(myAddress);
-  Mirf.setTADDR(remoteAddress);
+  Mirf.setRADDR(myAddress);  
   Mirf.payload = 4;
   Mirf.channel = 76;
   Mirf.config(); 
@@ -83,7 +93,7 @@ void setupRF()
 
 void setupEthernet()
 {
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) 
+	if (ether.begin(sizeof Ethernet::buffer, mymac, ethernetcsPin) == 0) 
   {
 #if HOME_ATION_DEBUG
     printf("Failed to access Ethernet controller\n\r");
@@ -101,19 +111,21 @@ void setupEthernet()
 #endif
 }
 
-//commandArray[0] - id - 1 - RemotePower
-//commandArray[1] - cmd - 0 - enable - commandArray[2] - param - 0-3 (numer portu)
+//commandArray[0] - id - indeks w tablicy adresów
+//commandArray[1] - type - 1 - RemotePower
+//commandArray[2] - cmd - 0 - enable - commandArray[3] - param - 0-3 (numer portu)
 //        - 1 - disable - j.w.
 //        - 2 - switch - j.w.
 //        - 3 - read all
 //		  - 4 - enable all
 //		  - 5 - disable all
-boolean sendRFCommand(byte* commandArray, uint8_t* response)
+boolean sendRF24Command(byte* commandArray, uint8_t* response)
 {    
   // First, stop listening so we can talk.    
 #ifdef HOME_ATION_DEBUG
-  printf("Now sending (%d-%d-%d)", commandArray[0], commandArray[1], commandArray[2]);
-#endif  
+  printf("Now sending (%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
+#endif 
+  Mirf.setTADDR(remoteDevices[commandArray[0]].deviceAddress);
   Mirf.send(commandArray);
   while(Mirf.isSending())
   {
@@ -154,10 +166,10 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
     if (ch == '\n')
       break;
   }
-  if (parameterNumber == 3)
+  if (parameterNumber == 4)
   {
 #ifdef HOME_ATION_DEBUG
-    printf("id=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2]);
+	  printf("id=%d;type=%d;cmd=%d;param=%d\n\r", commands[0], commands[1], commands[2], commands[3]);
 #endif
     return true;      
   }
@@ -170,18 +182,9 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
   }                    
 }
 
-void homePage(byte* address, int type, uint8_t* response) 
-{
-#ifdef HOME_ATION_DEBUG
-  printf("home page before emit\n\r");
-#endif  
-  bfill.emit_p(http_OK);
-  bfill.emit_p(devicesJsonStart);
-  bfill.emit_p(deviceJson, address[0], address[1], address[2], address[3], address[4], type, response[0], response[1], response[2], response[3]);
-  bfill.emit_p(devicesJsonEnd);
-#ifdef HOME_ATION_DEBUG
-  printf("home page after emit\n\r");
-#endif
+void commandResponse(byte id, uint8_t* response) 
+{   
+  bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
 }
 
 void loop() 
@@ -201,16 +204,55 @@ void loop()
 #ifdef HOME_ATION_DEBUG
     printf(data);		
 #endif
-    byte commands[3];
-    boolean hasParameters = getCommandFromQuery(data, len, commands);
-    int numberOfRetries = 3;
-    while(hasParameters && !hasCommandSend && numberOfRetries > 0)
-    {
-      numberOfRetries--;
-      hasCommandSend = sendRFCommand(commands, response);    
-    }
-    homePage(remoteAddress, commands[0], response);	
-    ether.httpServerReply(bfill.position());
+	if (strncmp_P("GET /command", data, 12) == 0)
+	{
+		byte command[4];
+		boolean hasParameters = getCommandFromQuery(data, len, command);
+		int numberOfRetries = 3;
+		while(hasParameters && !hasCommandSend && numberOfRetries > 0)
+		{
+		  numberOfRetries--;
+		  hasCommandSend = sendRF24Command(command, response);    
+		}
+		if (hasCommandSend)
+		{
+			bfill.emit_p(httpOkHeaders);
+			commandResponse(command[0], response);	
+			ether.httpServerReply(bfill.position());
+		}
+		else
+		{
+			bfill.emit_p(httpErrorHeaders, commandErrorInfo);
+			ether.httpServerReply(bfill.position());
+		}
+	}
+	else if (strncmp("GET /echo", data, 9) == 0)
+	{
+		bfill.emit_p(httpOkHeaders);
+		bfill.emit_p(echoText);
+		ether.httpServerReply(bfill.position());
+	}
+	else if (strncmp("GET /devices", data, 12) == 0)
+	{
+		bfill.emit_p(httpOkHeaders);
+		bfill.emit_p(devicesJsonStart);
+		int nrOfRemoteDevices = sizeof(remoteDevices)/sizeof(remoteDevices[0]);
+		for (int i = 0; i < nrOfRemoteDevices; i++)
+		{
+			byte* commandToSend = remoteDevices[i].deviceReadStateCommand;
+		
+			int numberOfRetries = 3;
+			while(!hasCommandSend && numberOfRetries > 0)
+			{
+			  numberOfRetries--;
+			  hasCommandSend = sendRF24Command(commandToSend, response);    
+			}
+			if (hasCommandSend)
+				commandResponse(commandToSend[0], response);
+		}
+		bfill.emit_p(devicesJsonEnd);
+		ether.httpServerReply(bfill.position());
+	}
 #ifdef HOME_ATION_DEBUG
     printf("new client end\n\r");
 #endif
