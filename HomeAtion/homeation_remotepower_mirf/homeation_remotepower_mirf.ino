@@ -7,6 +7,8 @@
 
 static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
+static uint8_t rf24cePin = 7;
+static uint8_t rf24csnPin = 8;
 
 int socketPins[] = { 2, 3, 4, 5};
 uint8_t socketPinsState[] = { HIGH, HIGH, HIGH, HIGH};
@@ -29,11 +31,12 @@ void setup(void)
 
 void setupRF(void)
 {
-  Mirf.cePin = 7;
-  Mirf.csnPin = 8;
+  Mirf.cePin = rf24cePin;
+  Mirf.csnPin = rf24csnPin;
   Mirf.spi = &MirfHardwareSpi;
   Mirf.init();
   Mirf.setRADDR(myAddress);
+  Mirf.setTADDR(mainAddress);
   Mirf.payload = 4;
   Mirf.channel = 76;
   Mirf.config();
@@ -58,38 +61,38 @@ void loop(void)
     bool done = false;
     Mirf.getData(command);     
 #if HA_REMOTE_POWER_DEBUG
-    printf("Read command from radio {%d,%d,%d}\n\r", command[0],command[1],command[2]);
+    printf("Read command from radio {%d,%d,%d}\n\r", command[1],command[2],command[3]);
 #endif    
-    if (command[0] == 1)//RemotePower
+    if (command[1] == 1)//RemotePower
     {
-      if (command[1] == 0) //enable 
+      if (command[2] == 0) //enable 
       {          
-        digitalWrite(socketPins[command[2]], LOW);
-        socketPinsState[command[2]] = LOW;
+        digitalWrite(socketPins[command[3]], LOW);
+        socketPinsState[command[3]] = LOW;
       }
-      else if (command[1] == 1) //disable
+      else if (command[2] == 1) //disable
       {          
-        digitalWrite(socketPins[command[2]], HIGH);
-        socketPinsState[command[2]] = HIGH;
+        digitalWrite(socketPins[command[3]], HIGH);
+        socketPinsState[command[3]] = HIGH;
       }
-      else if (command[1] == 2) //switch
+      else if (command[2] == 2) //switch
       {
-        if (socketPinsState[command[2]] == LOW)
+        if (socketPinsState[command[3]] == LOW)
         {
-          digitalWrite(socketPins[command[2]], HIGH);
-          socketPinsState[command[2]] = HIGH;
+          digitalWrite(socketPins[command[3]], HIGH);
+          socketPinsState[command[3]] = HIGH;
         }
         else
         {
-          digitalWrite(socketPins[command[2]], LOW); 
-          socketPinsState[command[2]] = LOW;         
+          digitalWrite(socketPins[command[3]], LOW); 
+          socketPinsState[command[3]] = LOW;         
         }
       } 
       else if (command[1] == 3)//read
       {          
         //do nothing          
       }
-      else if (command[1] == 4) //enable all
+      else if (command[2] == 4) //enable all
       {          
         for (int i = 0; i < 4; i++)
         {
@@ -97,7 +100,7 @@ void loop(void)
           socketPinsState[i] = LOW;          
         }
       }
-      else if (command[1] == 5) //disable all
+      else if (command[2] == 5) //disable all
       {          
         for (int i = 0; i < 4; i++)
         {
@@ -105,8 +108,7 @@ void loop(void)
           socketPinsState[i] = HIGH;          
         }          
       }
-    }        
-    Mirf.setTADDR(mainAddress);
+    }            
     Mirf.send(socketPinsState);
 #if HA_REMOTE_POWER_DEBUG
     printf("Sent state response {%d,%d,%d,%d}\n\r", socketPinsState[0],socketPinsState[1],socketPinsState[2],socketPinsState[3]);
