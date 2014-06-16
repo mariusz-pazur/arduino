@@ -1,15 +1,17 @@
 #include <SPI.h>
-#include <RF24.h>
+#include <Mirf.h>
+#include <nRF24L01.h>
+#include <MirfHardwareSpiDriver.h>
 #include "printf.h"
+#include "hardware.h"
 
-RF24 radio(7,8);
-const uint64_t myAddress = 0xF0F0F0F0D2LL;
-const uint64_t mainAddress = 0xF0F0F0F0E1LL;
+static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
+static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
+static uint8_t rf24cePin = 7;
+static uint8_t rf24csnPin = 8;
 
-int socketPins[] = {
-  2, 3, 4, 5};
-uint8_t socketPinsState[] = {
-  HIGH, HIGH, HIGH, HIGH};
+int socketPins[] = { 2, 3, 4, 5};
+uint8_t socketPinsState[] = { HIGH, HIGH, HIGH, HIGH};
 
 #define HA_REMOTE_POWER_DEBUG 1
 
@@ -21,23 +23,23 @@ void setup(void)
   printf("HomeAtion Remote Power Strip\n\r");
 #endif
   setupRF();
-  setupRelay();  
+  setupRelay(); 
+#if HA_REMOTE_POWER_DEBUG
+  printf("Free RAM: %d B\n\r", freeRam()); 
+#endif
 }
 
 void setupRF(void)
 {
-  radio.begin();
-  radio.setPALevel(RF24_PA_MAX);
-  radio.setChannel(0x4c);
-  radio.openWritingPipe(myAddress);
-  radio.openReadingPipe(1,mainAddress);
-  radio.enableDynamicPayloads() ;
-  radio.setAutoAck( true ) ;
-  radio.powerUp() ;
-  radio.startListening();
-#if HA_REMOTE_POWER_DEBUG
-  radio.printDetails();
-#endif
+  Mirf.cePin = rf24cePin;
+  Mirf.csnPin = rf24csnPin;
+  Mirf.spi = &MirfHardwareSpi;
+  Mirf.init();
+  Mirf.setRADDR(myAddress);
+  Mirf.setTADDR(mainAddress);
+  Mirf.payload = 4;
+  Mirf.channel = 76;
+  Mirf.config();
 }
 
 void setupRelay()
@@ -52,52 +54,45 @@ void setupRelay()
 void loop(void)
 {  
   // if there is data ready
-  if ( radio.available() )
+  if(!Mirf.isSending() && Mirf.dataReady())
   {
     // Dump the payloads until we've gotten everything
-    byte command[3];      
+    byte command[4];      
     bool done = false;
-    while (!done)
-    {
-      // Fetch the payload, and see if this was the last one.
-      done = radio.read( command, 3 );
-    }      
+    Mirf.getData(command);     
 #if HA_REMOTE_POWER_DEBUG
-    printf("Read command from radio {%d,%d,%d}\n\r", command[0],command[1],command[2]);
-#endif
-    // First, stop listening so we can talk
-    radio.stopListening();
-
-    if (command[0] == 1)//RemotePower
+    printf("Read command from radio {%d,%d,%d}\n\r", command[1],command[2],command[3]);
+#endif    
+    if (command[1] == 1)//RemotePower
     {
-      if (command[1] == 0) //enable 
+      if (command[2] == 0) //enable 
       {          
-        digitalWrite(socketPins[command[2]], LOW);
-        socketPinsState[command[2]] = LOW;
+        digitalWrite(socketPins[command[3]], LOW);
+        socketPinsState[command[3]] = LOW;
       }
-      else if (command[1] == 1) //disable
+      else if (command[2] == 1) //disable
       {          
-        digitalWrite(socketPins[command[2]], HIGH);
-        socketPinsState[command[2]] = HIGH;
+        digitalWrite(socketPins[command[3]], HIGH);
+        socketPinsState[command[3]] = HIGH;
       }
-      else if (command[1] == 2) //switch
+      else if (command[2] == 2) //switch
       {
-        if (socketPinsState[command[2]] == LOW)
+        if (socketPinsState[command[3]] == LOW)
         {
-          digitalWrite(socketPins[command[2]], HIGH);
-          socketPinsState[command[2]] = HIGH;
+          digitalWrite(socketPins[command[3]], HIGH);
+          socketPinsState[command[3]] = HIGH;
         }
         else
         {
-          digitalWrite(socketPins[command[2]], LOW); 
-          socketPinsState[command[2]] = HIGH;         
+          digitalWrite(socketPins[command[3]], LOW); 
+          socketPinsState[command[3]] = LOW;         
         }
       } 
       else if (command[1] == 3)//read
       {          
         //do nothing          
       }
-      else if (command[1] == 4) //enable all
+      else if (command[2] == 4) //enable all
       {          
         for (int i = 0; i < 4; i++)
         {
@@ -105,7 +100,7 @@ void loop(void)
           socketPinsState[i] = LOW;          
         }
       }
-      else if (command[1] == 5) //disable all
+      else if (command[2] == 5) //disable all
       {          
         for (int i = 0; i < 4; i++)
         {
@@ -113,13 +108,11 @@ void loop(void)
           socketPinsState[i] = HIGH;          
         }          
       }
-    }        
-    radio.write(socketPinsState, 4*sizeof(uint8_t));
+    }            
+    Mirf.send(socketPinsState);
 #if HA_REMOTE_POWER_DEBUG
     printf("Sent state response {%d,%d,%d,%d}\n\r", socketPinsState[0],socketPinsState[1],socketPinsState[2],socketPinsState[3]);
-#endif
-    // Now, resume listening so we catch the next packets.
-    radio.startListening();
+#endif        
   } 
 }
 
