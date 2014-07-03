@@ -7,10 +7,10 @@
 
 static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
-static uint8_t rf24cePin = 7;
-static uint8_t rf24csnPin = 8;
+static uint8_t rf24cePin = 9;
+static uint8_t rf24csnPin = 10;
 
-int socketPins[] = { 2, 3, 4, 5};
+int socketPins[] = { 5, 6, 7, 8 };
 uint8_t socketPinsState[] = { HIGH, HIGH, HIGH, HIGH};
 
 #define HA_REMOTE_POWER_DEBUG 1
