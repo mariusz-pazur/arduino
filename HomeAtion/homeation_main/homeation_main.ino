@@ -26,8 +26,8 @@ static RemoteDevice remoteDevices[] =
 };
 static uint8_t myAddress[] = { 
   0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
-static uint8_t rf24cePin = 7;
-static uint8_t rf24csnPin = 8;
+static uint8_t rf24cePin = 9;
+static uint8_t rf24csnPin = 10;
 
 #if STATIC
 static byte myip[] = { 
@@ -37,7 +37,7 @@ static byte mymac[] = {
   0x74,0x69,0x69,0x2D,0x30,0x31 };
 byte Ethernet::buffer[500]; 
 BufferFiller bfill;
-static uint8_t ethernetcsPin = 10;
+static uint8_t ethernetcsPin = 14;
 
 const char deviceJson[] PROGMEM = "{\"id\":$D,\"type\":$D,\"state\":[$D,$D,$D,$D]}";
 const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
@@ -65,9 +65,7 @@ const char commandErrorInfo[] PROGMEM =
 "Error during command send";
 const char echoText[] PROGMEM = "HomeAtionMain";
 
-int redPin = 3;
-int greenPin = 5;
-int bluePin = 6;
+static uint8_t greenLedPin = 3;
 
 //LiquidCrystal lcd(12,11,5,4,3,2);
 
@@ -95,10 +93,7 @@ void setup()
 #if HOME_ATION_DEBUG 
   printf("Free RAM: %d B\n\r", freeRam());     
 #endif
-  pinMode(redPin, OUTPUT);
-  pinMode(greenPin, OUTPUT);
-  pinMode(bluePin, OUTPUT); 
-  setColor(255,255,0);
+  pinMode(greenLedPin, OUTPUT);  
 }
 
 void setupRF()
@@ -119,24 +114,23 @@ void setupEthernet()
   {
 #if HOME_ATION_DEBUG
     printf("Failed to access Ethernet controller\n\r");
-#endif
-    setColor(180,0,0);
+#endif    
   }
   else
   {
 #if STATIC
     ether.staticSetup(myip);
+    digitalWrite(greenLedPin, HIGH);
 #else
     if (!ether.dhcpSetup())
     {
 #if HOME_ATION_DEBUG
       printf("DHCP failed\n\r");
-#endif
-      setColor(255,128,0);
+#endif      
     }
     else
     {
-      setColor(0,180,0);
+      digitalWrite(greenLedPin, HIGH);
     }
 #endif
   }
@@ -151,8 +145,7 @@ void setupEthernet()
 //		  - 4 - enable all
 //		  - 5 - disable all
 boolean sendRF24Command(byte* commandArray, uint8_t* response)
-{   
-   setColor(0,0,255); 
+{    
   // First, stop listening so we can talk.    
 #ifdef HOME_ATION_DEBUG
   printf("Now sending (%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
@@ -181,7 +174,6 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
     printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
 #endif
   }
-  setColor(0,180,0);
   return true;		 		
 }
 
@@ -221,18 +213,6 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
 void commandResponse(byte id, uint8_t* response) 
 {   
   bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
-}
-
-void setColor(int red, int green, int blue)
-{
-
-  red = 255 - red;
-  green = 255 - green;
-  blue = 255 - blue;
-
-  analogWrite(redPin, red);
-  analogWrite(greenPin, green);
-  analogWrite(bluePin, blue);
 }
 
 void loop() 
