@@ -40,8 +40,9 @@ BufferFiller bfill;
 static uint8_t ethernetcsPin = 10;
 
 const char deviceJson[] PROGMEM = "{\"id\":$D,\"type\":$D,\"state\":[$D,$D,$D,$D]}";
-const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
-const char devicesJsonEnd[] PROGMEM = "]}";
+const char devicesJsonStart[] PROGMEM = "["; 
+const char devicesJsonSeparator[] PROGMEM = ","; 
+const char devicesJsonEnd[] PROGMEM = "]";
 const char httpOkHeaders[] PROGMEM =
 "HTTP/1.1 200 OK\r\n"
 "Content-Type: application/json\r\n"
@@ -300,7 +301,10 @@ void loop()
           hasCommandSend = sendRF24Command(commandToSend, response);    
         }
         if (hasCommandSend)
+        {
           commandResponse(commandToSend[0], response);
+          bfill.emit_p(devicesJsonSeparator);
+        }
       }
       bfill.emit_p(devicesJsonEnd);
       ether.httpServerReply(bfill.position());
