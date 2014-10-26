@@ -4,14 +4,25 @@
 #include <MirfHardwareSpiDriver.h>
 #include "printf.h"
 #include "hardware.h"
+#include "aes256.h"
 
 static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD2};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
+static uint8_t commandAndResponseLength = 16;
 
+uint8_t numberOfSockets = 4;
 int socketPins[] = { 5, 6, 7, 8 };
 uint8_t socketPinsState[] = { HIGH, HIGH, HIGH, HIGH};
+
+aes256_context ctxt;
+uint8_t cryptoKey[] = { // change this to your own private key
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+  }; 
 
 #define HA_REMOTE_POWER_DEBUG 1
 
@@ -27,6 +38,7 @@ void setup(void)
 #if HA_REMOTE_POWER_DEBUG
   printf("Free RAM: %d B\n\r", freeRam()); 
 #endif
+  setupEncryption();
 }
 
 void setupRF(void)
@@ -37,7 +49,7 @@ void setupRF(void)
   Mirf.init();
   Mirf.setRADDR(myAddress);
   Mirf.setTADDR(mainAddress);
-  Mirf.payload = 4;
+  Mirf.payload = commandAndResponseLength;
   Mirf.channel = 76;
   Mirf.config();
 }
@@ -51,15 +63,22 @@ void setupRelay()
   }
 }
 
+void setupEncryption()
+{  
+  aes256_init(&ctxt, cryptoKey);          
+}
+
 void loop(void)
 {  
   // if there is data ready
   if(!Mirf.isSending() && Mirf.dataReady())
   {
     // Dump the payloads until we've gotten everything
-    byte command[4];      
+    byte command[commandAndResponseLength];
+    byte response[commandAndResponseLength];    
     bool done = false;
-    Mirf.getData(command);     
+    Mirf.getData(command);  
+    aes256_decrypt_ecb(&ctxt, command);   
 #if HA_REMOTE_POWER_DEBUG
     printf("Read command from radio {%d,%d,%d}\n\r", command[1],command[2],command[3]);
 #endif    
@@ -94,7 +113,7 @@ void loop(void)
       }
       else if (command[2] == 4) //enable all
       {          
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < numberOfSockets; i++)
         {
           digitalWrite(socketPins[i], LOW);
           socketPinsState[i] = LOW;          
@@ -102,14 +121,22 @@ void loop(void)
       }
       else if (command[2] == 5) //disable all
       {          
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < numberOfSockets; i++)
         {
           digitalWrite(socketPins[i], HIGH);
           socketPinsState[i] = HIGH;          
         }          
       }
-    }            
-    Mirf.send(socketPinsState);
+    } 
+    for (int i = 0; i < commandAndResponseLength; i++)
+    {
+      if (i < numberOfSockets)
+        response[i] = socketPinsState[i];    
+      else
+        response[i] = 0;
+    }
+    aes256_encrypt_ecb(&ctxt, response);
+    Mirf.send(response);
 #if HA_REMOTE_POWER_DEBUG
     printf("Sent state response {%d,%d,%d,%d}\n\r", socketPinsState[0],socketPinsState[1],socketPinsState[2],socketPinsState[3]);
 #endif        

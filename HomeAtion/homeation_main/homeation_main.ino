@@ -6,6 +6,7 @@
 //#include <LiquidCrystal.h>
 #include "printf.h"
 #include "hardware.h"
+#include "aes256.h"
 
 #define STATIC 0
 #define HOME_ATION_DEBUG 1
@@ -28,6 +29,7 @@ static uint8_t myAddress[] = {
   0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
+static uint8_t commandAndResponseLength = 16;
 
 #if STATIC
 static byte myip[] = { 
@@ -40,8 +42,9 @@ BufferFiller bfill;
 static uint8_t ethernetcsPin = 18;
 
 const char deviceJson[] PROGMEM = "{\"id\":$D,\"type\":$D,\"state\":[$D,$D,$D,$D]}";
-const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
-const char devicesJsonEnd[] PROGMEM = "]}";
+const char devicesJsonStart[] PROGMEM = "["; 
+const char devicesJsonSeparator[] PROGMEM = ","; 
+const char devicesJsonEnd[] PROGMEM = "]";
 const char httpOkHeaders[] PROGMEM =
 "HTTP/1.1 200 OK\r\n"
 "Content-Type: application/json\r\n"
@@ -69,6 +72,14 @@ static uint8_t greenLedPin = 3;
 
 //LiquidCrystal lcd(12,11,5,4,3,2);
 
+aes256_context ctxt;
+uint8_t cryptoKey[] = { // change this to your own private key
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+  };  
+
 void setup() 
 {
 #if HOME_ATION_DEBUG
@@ -93,7 +104,8 @@ void setup()
 #if HOME_ATION_DEBUG 
   printf("Free RAM: %d B\n\r", freeRam());     
 #endif
-  pinMode(greenLedPin, OUTPUT);  
+  pinMode(greenLedPin, OUTPUT); 
+  setupEncryption(); 
 }
 
 void setupRF()
@@ -103,7 +115,7 @@ void setupRF()
   Mirf.spi = &MirfHardwareSpi;
   Mirf.init();
   Mirf.setRADDR(myAddress);  
-  Mirf.payload = 4;
+  Mirf.payload = commandAndResponseLength;
   Mirf.channel = 76;
   Mirf.config(); 
 }
@@ -136,6 +148,11 @@ void setupEthernet()
   }
 }
 
+void setupEncryption()
+{  
+  aes256_init(&ctxt, cryptoKey);          
+}
+
 //commandArray[0] - id - indeks w tablicy adres�w
 //commandArray[1] - type - 1 - RemotePower
 //commandArray[2] - cmd - 0 - enable - commandArray[3] - param - 0-3 (numer portu)
@@ -146,12 +163,17 @@ void setupEthernet()
 //		  - 5 - disable all
 boolean sendRF24Command(byte* commandArray, uint8_t* response)
 {    
+  byte encryptedCommand[commandAndResponseLength];
+  for (int i = 0; i< commandAndResponseLength; i++)
+    encryptedCommand[i] = commandArray[i];
   // First, stop listening so we can talk.    
 #ifdef HOME_ATION_DEBUG
   printf("Now sending (%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
 #endif 
   Mirf.setTADDR(remoteDevices[commandArray[0]].deviceAddress);
-  Mirf.send(commandArray);
+  aes256_encrypt_ecb(&ctxt, encryptedCommand);
+  Mirf.send(encryptedCommand);
+  
   while(Mirf.isSending())
   {
   }
@@ -169,7 +191,8 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
   }
   if (commandArray[1] == 1)//Remote Power Strip
   {
-    Mirf.getData(response);				
+    Mirf.getData(response);
+    aes256_decrypt_ecb(&ctxt, response);				
 #if HOME_ATION_DEBUG
     printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
 #endif
@@ -217,8 +240,12 @@ void commandResponse(byte id, uint8_t* response)
 
 void loop() 
 {
-  uint8_t response[] = {
-    0, 0, 0, 0    };
+  uint8_t response[] = { 
+    0, 0, 0, 0,
+    0, 0, 0, 0,  
+    0, 0, 0, 0,  
+    0, 0, 0, 0    
+  };
   boolean hasCommandSend = false;
   word len = ether.packetReceive();
   word pos = ether.packetLoop(len); 
@@ -238,7 +265,7 @@ void loop()
 #ifdef HOME_ATION_DEBUG
       printf("\n\rcommand\n\r");		
 #endif
-      byte command[4];
+      byte command[commandAndResponseLength];
       boolean hasParameters = getCommandFromQuery(data, len, command);
       int numberOfRetries = 3;
       while(hasParameters && !hasCommandSend && numberOfRetries > 0)
@@ -280,7 +307,10 @@ void loop()
           hasCommandSend = sendRF24Command(commandToSend, response);    
         }
         if (hasCommandSend)
+        {
           commandResponse(commandToSend[0], response);
+          bfill.emit_p(devicesJsonSeparator);
+        }
       }
       bfill.emit_p(devicesJsonEnd);
       ether.httpServerReply(bfill.position());
@@ -295,7 +325,3 @@ void loop()
 #endif
   }
 }
-
-
-
-
