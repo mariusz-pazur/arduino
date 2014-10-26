@@ -37,7 +37,7 @@ static byte mymac[] = {
   0x74,0x69,0x69,0x2D,0x30,0x31 };
 byte Ethernet::buffer[500]; 
 BufferFiller bfill;
-static uint8_t ethernetcsPin = 14;
+static uint8_t ethernetcsPin = 18;
 
 const char deviceJson[] PROGMEM = "{\"id\":$D,\"type\":$D,\"state\":[$D,$D,$D,$D]}";
 const char devicesJsonStart[] PROGMEM = "{\"devices\":["; 
