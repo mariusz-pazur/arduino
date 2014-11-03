@@ -18,11 +18,11 @@ void setup() {
 
 void loop() {
   // Some example procedures showing how to display to the pixels:
-  colorWipe(strip.Color(255, 0, 0), 500); // Red
-  colorWipe(strip.Color(0, 255, 0), 500); // Green
-  colorWipe(strip.Color(0, 0, 255), 500); // Blue
-  rainbow(20);
-  rainbowCycle(20);
+  //colorWipe(strip.Color(255, 0, 0), 500); // Red
+  //colorWipe(strip.Color(0, 255, 0), 500); // Green
+  //colorWipe(strip.Color(0, 0, 255), 500); // Blue
+  rainbow(50);
+  rainbowCycle(50);
 //  strip.setPixelColor(0, strip.Color(255, 0, 0));
 //  strip.setPixelColor(1, strip.Color(255, 0, 0));
 //  strip.setPixelColor(2, strip.Color(255, 0, 0));
