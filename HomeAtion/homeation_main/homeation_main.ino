@@ -8,8 +8,8 @@
 #include "hardware.h"
 #include "aes256.h"
 
-#define STATIC 0
-#define HOME_ATION_DEBUG 1
+#define STATIC 1
+#define HOME_ATION_DEBUG 0
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -117,6 +117,7 @@ void setupRF()
   Mirf.setRADDR(myAddress);  
   Mirf.payload = commandAndResponseLength;
   Mirf.channel = 76;
+  Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 ) );
   Mirf.config(); 
 }
 
@@ -132,7 +133,7 @@ void setupEthernet()
   {
 #if STATIC
     ether.staticSetup(myip);
-    digitalWrite(greenLedPin, HIGH);
+    digitalWrite(greenLedPin, LOW);
 #else
     if (!ether.dhcpSetup())
     {
@@ -142,7 +143,7 @@ void setupEthernet()
     }
     else
     {
-      digitalWrite(greenLedPin, HIGH);
+      digitalWrite(greenLedPin, LOW);
     }
 #endif
   }
