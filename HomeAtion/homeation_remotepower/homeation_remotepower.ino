@@ -22,7 +22,7 @@ uint8_t cryptoKey[] = { // change this to your own private key
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
     0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-  }; 
+  };  
 
 #define HA_REMOTE_POWER_DEBUG 0
 
@@ -50,8 +50,8 @@ void setupRF(void)
   Mirf.setRADDR(myAddress);
   Mirf.setTADDR(mainAddress);
   Mirf.payload = commandAndResponseLength;
-  Mirf.channel = 76;
-  Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 ) );
+  Mirf.channel = 90;
+  Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 | 1<<5 ) );
   Mirf.config();
 }
 

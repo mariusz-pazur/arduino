@@ -116,8 +116,8 @@ void setupRF()
   Mirf.init();
   Mirf.setRADDR(myAddress);  
   Mirf.payload = commandAndResponseLength;
-  Mirf.channel = 76;
-  Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 ) );
+  Mirf.channel = 90;
+  Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 | 1<<5 ) );
   Mirf.config(); 
 }
 
