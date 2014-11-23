@@ -9,7 +9,7 @@
 #include "aes256.h"
 
 #define STATIC 1
-#define HOME_ATION_DEBUG 0
+#define HOME_ATION_DEBUG 1
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -120,7 +120,17 @@ void setupRF()
   Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 | 1<<5 ) );
   Mirf.config(); 
 }
-
+//callback that prints received packets to the serial port
+void udpSerialPrint(word port, byte ip[4], const char *data, word len) 
+{
+#if HOME_ATION_DEBUG
+  printf("UDP packet arrived\n\r");
+  printf("From IP: %d.%d.%d.%d\n\r", ip[0], ip[1], ip[2], ip[3]);  
+  printf("To Port: %d\n\r", port);
+  printf("Data: %s\n\r", data);
+  printf("Data length: %d\n\r", len);
+#endif
+}
 void setupEthernet()
 {
   if (ether.begin(sizeof Ethernet::buffer, mymac, ethernetcsPin) == 0) 
@@ -146,6 +156,7 @@ void setupEthernet()
       digitalWrite(greenLedPin, LOW);
     }
 #endif
+    ether.udpServerListenOnPort(&udpSerialPrint, 1337);
   }
 }
 
@@ -324,5 +335,5 @@ void loop()
 #ifdef HOME_ATION_DEBUG
     printf("new client end\n\r");
 #endif
-  }
+  }  
 }
