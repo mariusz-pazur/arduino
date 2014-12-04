@@ -10,6 +10,7 @@
 
 #define STATIC 1
 #define HOME_ATION_DEBUG 1
+#define FS(x) (__FlashStringHelper*)(x)
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -32,14 +33,19 @@ static uint8_t rf24csnPin = 10;
 static uint8_t commandAndResponseLength = 16;
 
 #if STATIC
-static byte myip[] = { 
-  192,168,0,6 };
+static byte myip[] = { 192,168,0,6 };
+static byte gwip[] = { 192,168,0,1 };
+static byte dnsip[] = { 62,179,1,60 };
+static byte mask[] = { 255,255,255,0 };
 #endif
+static byte broadcastip[] = { 255,255,255,255 };
 static byte mymac[] = { 
   0x74,0x69,0x69,0x2D,0x30,0x31 };
 byte Ethernet::buffer[500]; 
 BufferFiller bfill;
 static uint8_t ethernetcsPin = 18;
+unsigned int portMy = 40000; 
+unsigned int portDestination = 40001; 
 
 const char deviceJson[] PROGMEM = "{\"id\":$D,\"type\":$D,\"state\":[$D,$D,$D,$D]}";
 const char devicesJsonStart[] PROGMEM = "["; 
@@ -66,6 +72,8 @@ const char http404Headers[] PROGMEM =
 
 const char commandErrorInfo[] PROGMEM = 
 "Error during command send";
+const char echoRequest[] = "HomeAtionMainRequest";
+const char homeAtionResponse[] = "HomeAtionMain";
 const char echoText[] PROGMEM = "HomeAtionMain";
 
 static uint8_t greenLedPin = 3;
@@ -73,40 +81,12 @@ static uint8_t greenLedPin = 3;
 //LiquidCrystal lcd(12,11,5,4,3,2);
 
 aes256_context ctxt;
-uint8_t cryptoKey[] = { // change this to your own private key
+uint8_t cryptoKey[] = { 
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-  };  
-
-void setup() 
-{
-#if HOME_ATION_DEBUG
-  Serial.begin(57600);  
-  printf_begin();
-#endif
-  setupEthernet();  
-  setupRF();  
-#if HOME_ATION_DEBUG
-  printf("HomeAtion Main\n\r");
-  printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
-#endif
-  /*lcd.begin(16, 2);
-   lcd.clear();
-   lcd.print(ether.myip[0]);
-   lcd.print('.');
-   lcd.print(ether.myip[1]);
-   lcd.print('.');
-   lcd.print(ether.myip[2]);
-   lcd.print('.');
-   lcd.print(ether.myip[3]);*/
-#if HOME_ATION_DEBUG 
-  printf("Free RAM: %d B\n\r", freeRam());     
-#endif
-  pinMode(greenLedPin, OUTPUT); 
-  setupEncryption(); 
-}
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+  }; 
 
 void setupRF()
 {
@@ -130,9 +110,26 @@ void udpSerialPrint(word port, byte ip[4], const char *data, word len)
   printf("Data: %s\n\r", data);
   printf("Data length: %d\n\r", len);
 #endif
+  if (strncmp(echoRequest, data, 20) == 0)
+  {
+#if HOME_ATION_DEBUG
+    printf("ECHO Request\n\r");
+    printf("Response: %s\n\r", echoText);    
+#endif
+    unsigned long started_sending_at = millis();
+    while ( ( millis() - started_sending_at ) < 10000 )
+    {
+      ether.sendUdp(homeAtionResponse, sizeof(homeAtionResponse), portMy, broadcastip, portDestination);
+      delay(1000);
+    }
+#if HOME_ATION_DEBUG
+    printf("UDP Response send\n\r");
+#endif    
+  } 
 }
 void setupEthernet()
 {
+  
   if (ether.begin(sizeof Ethernet::buffer, mymac, ethernetcsPin) == 0) 
   {
 #if HOME_ATION_DEBUG
@@ -142,7 +139,7 @@ void setupEthernet()
   else
   {
 #if STATIC
-    ether.staticSetup(myip);
+    ether.staticSetup(myip, gwip, dnsip, mask);
     digitalWrite(greenLedPin, LOW);
 #else
     if (!ether.dhcpSetup())
@@ -155,8 +152,8 @@ void setupEthernet()
     {
       digitalWrite(greenLedPin, LOW);
     }
-#endif
-    ether.udpServerListenOnPort(&udpSerialPrint, 1337);
+#endif    
+    ether.udpServerListenOnPort(&udpSerialPrint, portMy);
   }
 }
 
@@ -249,9 +246,36 @@ void commandResponse(byte id, uint8_t* response)
 {   
   bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
 }
+void setup() 
+{
+#if HOME_ATION_DEBUG
+  Serial.begin(57600);  
+  printf_begin();
+#endif
+  setupEthernet();  
+  setupRF();  
+#if HOME_ATION_DEBUG
+  printf("HomeAtion Main\n\r");
+  printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
+#endif
+  /*lcd.begin(16, 2);
+   lcd.clear();
+   lcd.print(ether.myip[0]);
+   lcd.print('.');
+   lcd.print(ether.myip[1]);
+   lcd.print('.');
+   lcd.print(ether.myip[2]);
+   lcd.print('.');
+   lcd.print(ether.myip[3]);*/
+#if HOME_ATION_DEBUG 
+  printf("Free RAM: %d B\n\r", freeRam());     
+#endif
+  pinMode(greenLedPin, OUTPUT); 
+  setupEncryption(); 
+}
 
 void loop() 
-{
+{  
   uint8_t response[] = { 
     0, 0, 0, 0,
     0, 0, 0, 0,  
@@ -335,5 +359,5 @@ void loop()
 #ifdef HOME_ATION_DEBUG
     printf("new client end\n\r");
 #endif
-  }  
+  }   
 }

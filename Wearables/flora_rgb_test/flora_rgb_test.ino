@@ -21,7 +21,7 @@ void loop() {
   //colorWipe(strip.Color(255, 0, 0), 500); // Red
   //colorWipe(strip.Color(0, 255, 0), 500); // Green
   //colorWipe(strip.Color(0, 0, 255), 500); // Blue
-  rainbow(50);
+  //rainbow(50);
   rainbowCycle(50);
 //  strip.setPixelColor(0, strip.Color(255, 0, 0));
 //  strip.setPixelColor(1, strip.Color(255, 0, 0));
