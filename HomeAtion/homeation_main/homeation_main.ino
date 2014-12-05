@@ -7,10 +7,10 @@
 #include "printf.h"
 #include "hardware.h"
 #include "aes256.h"
+#include "crypto.h"
 
-#define STATIC 1
-#define HOME_ATION_DEBUG 1
-#define FS(x) (__FlashStringHelper*)(x)
+#define STATIC 0
+#define HOME_ATION_DEBUG 0
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -81,12 +81,13 @@ static uint8_t greenLedPin = 3;
 //LiquidCrystal lcd(12,11,5,4,3,2);
 
 aes256_context ctxt;
-uint8_t cryptoKey[] = { 
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
-  }; 
+//add your own in crypto.h
+//uint8_t cryptoKey[] = { 
+//    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+//    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+//    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+//    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+//  }; 
 
 void setupRF()
 {
@@ -100,7 +101,7 @@ void setupRF()
   Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 | 1<<5 ) );
   Mirf.config(); 
 }
-//callback that prints received packets to the serial port
+
 void udpSerialPrint(word port, byte ip[4], const char *data, word len) 
 {
 #if HOME_ATION_DEBUG
@@ -116,17 +117,13 @@ void udpSerialPrint(word port, byte ip[4], const char *data, word len)
     printf("ECHO Request\n\r");
     printf("Response: %s\n\r", echoText);    
 #endif
-    unsigned long started_sending_at = millis();
-    while ( ( millis() - started_sending_at ) < 10000 )
-    {
-      ether.sendUdp(homeAtionResponse, sizeof(homeAtionResponse), portMy, broadcastip, portDestination);
-      delay(1000);
-    }
+    ether.sendUdp(homeAtionResponse, sizeof(homeAtionResponse), portMy, broadcastip, portDestination);    
 #if HOME_ATION_DEBUG
     printf("UDP Response send\n\r");
 #endif    
   } 
 }
+
 void setupEthernet()
 {
   
@@ -160,6 +157,34 @@ void setupEthernet()
 void setupEncryption()
 {  
   aes256_init(&ctxt, cryptoKey);          
+}
+
+void setup() 
+{
+#if HOME_ATION_DEBUG
+  Serial.begin(57600);  
+  printf_begin();
+#endif
+  setupEthernet();  
+  setupRF();  
+#if HOME_ATION_DEBUG
+  printf("HomeAtion Main\n\r");
+  printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
+#endif
+  /*lcd.begin(16, 2);
+   lcd.clear();
+   lcd.print(ether.myip[0]);
+   lcd.print('.');
+   lcd.print(ether.myip[1]);
+   lcd.print('.');
+   lcd.print(ether.myip[2]);
+   lcd.print('.');
+   lcd.print(ether.myip[3]);*/
+#if HOME_ATION_DEBUG 
+  printf("Free RAM: %d B\n\r", freeRam());     
+#endif
+  pinMode(greenLedPin, OUTPUT); 
+  setupEncryption(); 
 }
 
 //commandArray[0] - id - indeks w tablicy adres�w
@@ -245,33 +270,6 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
 void commandResponse(byte id, uint8_t* response) 
 {   
   bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
-}
-void setup() 
-{
-#if HOME_ATION_DEBUG
-  Serial.begin(57600);  
-  printf_begin();
-#endif
-  setupEthernet();  
-  setupRF();  
-#if HOME_ATION_DEBUG
-  printf("HomeAtion Main\n\r");
-  printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
-#endif
-  /*lcd.begin(16, 2);
-   lcd.clear();
-   lcd.print(ether.myip[0]);
-   lcd.print('.');
-   lcd.print(ether.myip[1]);
-   lcd.print('.');
-   lcd.print(ether.myip[2]);
-   lcd.print('.');
-   lcd.print(ether.myip[3]);*/
-#if HOME_ATION_DEBUG 
-  printf("Free RAM: %d B\n\r", freeRam());     
-#endif
-  pinMode(greenLedPin, OUTPUT); 
-  setupEncryption(); 
 }
 
 void loop() 

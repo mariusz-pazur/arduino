@@ -1,4 +1,5 @@
-/HomeAtion/Crypto.key
+/HomeAtion/homeation_main/crypto.h
+/HomeAtion/homeation_remotepower/crypto.h
 # Object files
 *.o
 *.ko
