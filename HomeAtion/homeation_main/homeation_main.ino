@@ -193,8 +193,9 @@ void setup()
 //        - 1 - disable - j.w.
 //        - 2 - switch - j.w.
 //        - 3 - read all
-//		  - 4 - enable all
-//		  - 5 - disable all
+//	  - 4 - enable all
+//	  - 5 - disable all
+//        - 6 - set state - commandArray[3] - param - flaga z bitami odpowiadającymi stanom portów
 boolean sendRF24Command(byte* commandArray, uint8_t* response)
 {    
   byte encryptedCommand[commandAndResponseLength];

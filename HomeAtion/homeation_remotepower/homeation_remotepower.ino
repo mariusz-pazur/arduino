@@ -109,10 +109,10 @@ void loop(void)
           socketPinsState[command[3]] = LOW;         
         }
       } 
-      else if (command[1] == 3)//read
-      {          
-        //do nothing          
-      }
+//      else if (command[2] == 3)//read
+//      {          
+//        //do nothing          
+//      }
       else if (command[2] == 4) //enable all
       {          
         for (int i = 0; i < numberOfSockets; i++)
@@ -128,6 +128,16 @@ void loop(void)
           digitalWrite(socketPins[i], HIGH);
           socketPinsState[i] = HIGH;          
         }          
+      }
+      else if (command[2] == 6) //set state
+      {        
+        byte flags = command[3];//15 - disable all, 14 - enable first(disable rest), 13 - enable second(disable rest), 9 - enable third(disable rest), 7 - enable fourth(disable rest),...,0 - enable all
+        byte mask = 1;
+        for (int i = 0; i < numberOfSockets; i++, flags >>= 1)
+        {
+          digitalWrite(socketPins[i], flags & mask);
+          socketPinsState[i] = flags & mask;            
+        }
       }
     } 
     for (int i = 0; i < commandAndResponseLength; i++)
