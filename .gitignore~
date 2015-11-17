@@ -1,0 +1,24 @@
+/HomeAtion/Crypto.key
+/HomeAtion/homeation_main/crypto.h
+/HomeAtion/homeation_remotepower/crypto.h
+# Object files
+*.o
+*.ko
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+/HomeAtion/homeation/Visual Micro/Compile.vmps.xml
+/HomeAtion/homeation/Visual Micro/Configuration.Debug.vmps.xml
+*.user
