@@ -18,13 +18,9 @@ struct RemoteDevice {
   uint8_t deviceReadStateCommand[4];
 };
 static RemoteDevice remoteDevices[] = 
-{ 
-  { 
-    {
-      0xF0, 0xF0, 0xF0, 0xF0, 0xD2        }
-    , 1, {
-      0, 1, 3, 0        } 
-  } 
+{    
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD2 }, 1, { 0, 1, 3, 0 } },
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 1, { 1, 1, 3, 0 } }  
 };
 static uint8_t myAddress[] = { 
   0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
