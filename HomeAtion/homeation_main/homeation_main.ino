@@ -9,18 +9,21 @@
 #include "aes256.h"
 #include "crypto.h"
 
-#define STATIC 0
+#define STATIC 1
 #define HOME_ATION_DEBUG 0
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
   uint8_t deviceType;
   uint8_t deviceReadStateCommand[4];
+  uint8_t commandResponse[16];
 };
 static RemoteDevice remoteDevices[] = 
 {    
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD2 }, 1, { 0, 1, 3, 0 } },
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 1, { 1, 1, 3, 0 } }  
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD2 }, 1, { 0, 1, 3, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 2, { 1, 2, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } }//,
+//    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 3, { 2, 3, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
+//    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 4, { 3, 4, 0, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } } 
 };
 static uint8_t myAddress[] = { 
   0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
@@ -183,21 +186,36 @@ void setup()
   setupEncryption(); 
 }
 
-//commandArray[0] - id - indeks w tablicy adres�w
+//commandArray[0] - id - indeks w tablicy adresďż˝w
 //commandArray[1] - type - 1 - RemotePower
 //commandArray[2] - cmd - 0 - enable - commandArray[3] - param - 0-3 (numer portu)
 //        - 1 - disable - j.w.
 //        - 2 - switch - j.w.
 //        - 3 - read all
-//	  - 4 - enable all
-//	  - 5 - disable all
+//	      - 4 - enable all
+//	      - 5 - disable all
 //        - 6 - set state - commandArray[3] - param - flaga z bitami odpowiadającymi stanom portów
+
+//commandArray[1] - type - 2 - RemoteLED
+//commandArray[2] - cmd - 0 - turn off
+//                      - 1 - enable effect - commandArray[3] - param - 0(rainbow wheel)
+//                      - 2 - read state {X1, X2, X3, X4}, X1 == 0 --> turned off; X1 == 1 --> effect enabled, X2 --> effect number (0 - rainbow wheel)
+
+//commandArray[1] - type - 3 - RemoteDHT
+//commandArray[2] - cmd - 0 - read temp
+//                      - 1 - read humidity
+//                      - 2 - read all
+
+//commandArray[1] - type - 4 - RemoteNoise
+//commandArray[2] - cmd - 0 - read current
+//                      - 1 - read mean in time - param - liczba sekund pomiaru do uśrednienia
+
+
 boolean sendRF24Command(byte* commandArray, uint8_t* response)
 {    
   byte encryptedCommand[commandAndResponseLength];
   for (int i = 0; i< commandAndResponseLength; i++)
-    encryptedCommand[i] = commandArray[i];
-  // First, stop listening so we can talk.    
+    encryptedCommand[i] = commandArray[i]; 
 #ifdef HOME_ATION_DEBUG
   printf("Now sending (%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
 #endif 
@@ -220,7 +238,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
       return false;
     }
   }
-  if (commandArray[1] == 1)//Remote Power Strip
+  if (commandArray[1] == 1 || commandArray[1] == 2)//Remote Power Strip || Remote LED
   {
     Mirf.getData(response);
     aes256_decrypt_ecb(&ctxt, response);				
@@ -239,11 +257,11 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
     char ch = requestLine[i];
     if (ch == '=')
     {      
-      commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));
-      parameterNumber++;
+      commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));      
 #ifdef HOME_ATION_DEBUG
-      printf("parameter - %d\n\r", parameterNumber);
+      printf("parameter - nr %d - value - %d\n\r", parameterNumber, commands[parameterNumber]);
 #endif
+      parameterNumber++;
     }
     if (ch == '\n')
       break;
@@ -271,12 +289,7 @@ void commandResponse(byte id, uint8_t* response)
 
 void loop() 
 {  
-  uint8_t response[] = { 
-    0, 0, 0, 0,
-    0, 0, 0, 0,  
-    0, 0, 0, 0,  
-    0, 0, 0, 0    
-  };
+  delay(10);  
   boolean hasCommandSend = false;
   word len = ether.packetReceive();
   word pos = ether.packetLoop(len); 
@@ -302,12 +315,12 @@ void loop()
       while(hasParameters && !hasCommandSend && numberOfRetries > 0)
       {
         numberOfRetries--;
-        hasCommandSend = sendRF24Command(command, response);    
+        hasCommandSend = sendRF24Command(command, remoteDevices[command[0]].commandResponse);    
       }
       if (hasCommandSend)
       {
         bfill.emit_p(httpOkHeaders);
-        commandResponse(command[0], response);	
+        commandResponse(command[0], remoteDevices[command[0]].commandResponse);	
         ether.httpServerReply(bfill.position());
       }
       else
@@ -328,9 +341,10 @@ void loop()
       bfill.emit_p(devicesJsonStart);
       int nrOfRemoteDevices = sizeof(remoteDevices)/sizeof(remoteDevices[0]);
       for (int i = 0; i < nrOfRemoteDevices; i++)
-      {
+      {  
+        hasCommandSend = false;      
         byte* commandToSend = remoteDevices[i].deviceReadStateCommand;
-
+        uint8_t* response = remoteDevices[i].commandResponse;
         int numberOfRetries = 3;
         while(!hasCommandSend && numberOfRetries > 0)
         {
@@ -340,7 +354,8 @@ void loop()
         if (hasCommandSend)
         {
           commandResponse(commandToSend[0], response);
-          bfill.emit_p(devicesJsonSeparator);
+          if (i < (nrOfRemoteDevices - 1))
+            bfill.emit_p(devicesJsonSeparator);
         }
       }
       bfill.emit_p(devicesJsonEnd);
@@ -356,3 +371,4 @@ void loop()
 #endif
   }   
 }
+

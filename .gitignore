@@ -21,3 +21,5 @@
 /HomeAtion/homeation/Visual Micro/Compile.vmps.xml
 /HomeAtion/homeation/Visual Micro/Configuration.Debug.vmps.xml
 *.user
+
+*.hex
