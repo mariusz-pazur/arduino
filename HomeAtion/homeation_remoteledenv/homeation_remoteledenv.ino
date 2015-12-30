@@ -12,9 +12,14 @@ static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD3};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
-static uint8_t commandAndResponseLength = 16;
 
-int ledsPin = 6;
+static uint8_t commandAndResponseLength = 16;
+static byte command[] = {0,0,0,0,
+                         0,0,0,0,
+                         0,0,0,0,
+                         0,0,0,0};
+
+int ledsPin = 3;
 boolean hasToTurnOff = false;
 uint8_t stateLength = 4;
 uint8_t state[] = { 0, 0, 0, 0};
@@ -26,6 +31,13 @@ uint8_t state[] = { 0, 0, 0, 0};
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(7, ledsPin, NEO_GRB + NEO_KHZ800);
+
+static uint8_t brightness = 255;
+static uint8_t nightModePin = 7;
+static uint8_t offlineEnablePin = 8;
+int isInNightModeState = 0; 
+int enableState = 0;
+int previousEnableState = 0;
 
 aes256_context ctxt;
 //uint8_t cryptoKey[] = { // set this in crypto.h
@@ -39,6 +51,8 @@ aes256_context ctxt;
 
 void setup(void)
 {
+  pinMode(nightModePin, INPUT);
+  pinMode(offlineEnablePin, INPUT);
 #if HA_REMOTE_LEDENV_DEBUG
   Serial.begin(57600);
   printf_begin();
@@ -78,14 +92,18 @@ void setupLeds()
 }
 
 void loop(void)
-{ 
-  byte command[commandAndResponseLength]; 
+{     
+  checkForBrightnessChange();
   // if there is data ready
   if(!Mirf.isSending() && Mirf.dataReady())
   {
     // Dump the payloads until we've gotten everything    
     byte response[commandAndResponseLength];    
     bool done = false;
+    for (int i = 0; i < commandAndResponseLength; i++)
+    {
+      command[i] = 0;
+    }
     Mirf.getData(command);  
     aes256_decrypt_ecb(&ctxt, command);   
 #if HA_REMOTE_LEDENV_DEBUG
@@ -125,6 +143,14 @@ void loop(void)
     printf("Sent state response {%d,%d,%d,%d}\n\r", state[0],state[1],state[2],state[3]);
 #endif         
   } 
+  previousEnableState = enableState;
+  enableState = digitalRead(offlineEnablePin);
+  if (previousEnableState == LOW && enableState == HIGH)
+  {
+    command[1] = 2;
+    state[0] = 1;
+    state[1] = 0;
+  }
   if (command[1] == 2)//RemoteLED
   {
     if (state[0] == 0) //turn off
@@ -156,7 +182,16 @@ void rainbowCycle(uint8_t wait)
     {
       delay(wait/5);
       if (!Mirf.isSending() && Mirf.dataReady())
-        return;
+        return;      
+    }
+    checkForBrightnessChange();
+    previousEnableState = enableState;
+    enableState = digitalRead(offlineEnablePin);
+    if (previousEnableState == HIGH && enableState == LOW)
+    {
+      command[1] = 2;
+      state[0] = 0;
+      return;
     }
   }
 }
@@ -167,17 +202,17 @@ uint32_t Wheel(byte WheelPos)
 {
   if(WheelPos < 85) 
   {
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+    return strip.Color((brightness * WheelPos * 3)/255, (brightness * (255 - WheelPos * 3))/255, 0);
   } 
   else if(WheelPos < 170) 
   {
     WheelPos -= 85;
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+    return strip.Color((brightness * (255 - WheelPos * 3))/255, 0, (brightness * WheelPos * 3)/255);
   } 
   else 
   {
     WheelPos -= 170;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+    return strip.Color(0, (brightness * WheelPos * 3)/255, (brightness * (255 - WheelPos * 3))/255);
   }
 }
 
@@ -190,5 +225,14 @@ void colorWipe(uint32_t c, uint8_t wait)
       strip.show();
       delay(wait);
   }
+}
+
+void checkForBrightnessChange()
+{
+  isInNightModeState = digitalRead(nightModePin);
+    if (isInNightModeState == HIGH)
+      brightness = 127;
+    else
+      brightness = 255;
 }
 
