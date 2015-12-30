@@ -21,8 +21,8 @@ struct RemoteDevice {
 static RemoteDevice remoteDevices[] = 
 {    
     { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD2 }, 1, { 0, 1, 3, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 2, { 1, 2, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } }//,
-//    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 3, { 2, 3, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 2, { 1, 2, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 3, { 2, 3, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
 //    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 4, { 3, 4, 0, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } } 
 };
 static uint8_t myAddress[] = { 
@@ -238,7 +238,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
       return false;
     }
   }
-  if (commandArray[1] == 1 || commandArray[1] == 2)//Remote Power Strip || Remote LED
+  if (commandArray[1] == 1 || commandArray[1] == 2 || commandArray[1] == 3)//Remote Power Strip || Remote LED || DHT11
   {
     Mirf.getData(response);
     aes256_decrypt_ecb(&ctxt, response);				

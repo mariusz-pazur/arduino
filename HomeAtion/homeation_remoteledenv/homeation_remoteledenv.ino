@@ -3,6 +3,7 @@
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 #include <Adafruit_NeoPixel.h>
+#include "DHT.h"
 #include "printf.h"
 #include "hardware.h"
 #include "aes256.h"
@@ -23,6 +24,7 @@ int ledsPin = 3;
 boolean hasToTurnOff = false;
 uint8_t stateLength = 4;
 uint8_t state[] = { 0, 0, 0, 0};
+uint8_t ledState[] = { 0, 0, 0, 0 };
 // Parameter 1 = number of pixels in strip
 // Parameter 2 = pin number (most are valid)
 // Parameter 3 = pixel type flags, add together as needed:
@@ -46,6 +48,9 @@ aes256_context ctxt;
 //    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 //    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
 //  };  
+
+int dhtPin = 4;
+DHT dht(dhtPin, DHT11);
 
 #define HA_REMOTE_LEDENV_DEBUG 1
 
@@ -114,22 +119,60 @@ void loop(void)
       if (command[2] == 0) //turn off 
       { 
         for (int i = 0; i < stateLength; i++)
+        {
           state[i] = 0;                
+          ledState[i] = 0;
+        }
       }
       else if (command[2] == 1) //enableEffect
       {    
-        state[0] = 1;
-        state[1] = command[3];      
+        state[0] = ledState[0] = 1;
+        state[1] = ledState[1] = command[3];      
         if (command[3] == 0) //rainbowWheel
         { 
-          state[2] = 0;
-          state[3] = 0;         
+          state[2] = ledState[2] = 0;
+          state[3] = ledState[2] = 0;         
         }
       }
       else if (command[2] == 2) //read state
-      {        
+      {       
+        for (int i = 0; i < stateLength; i++)
+        {
+          state[i] = ledState[i];
+        } 
       } 
     } 
+    else if (command[1] == 3) //DHT
+    {
+      if (command[2] == 0) //read temp
+      {
+        float t = dht.readTemperature();
+#if HA_REMOTE_LEDENV_DEBUG
+        printf("Temperature: %f\n\r", t);
+#endif         
+        float2Bytes(state, t);       
+      }
+      else if (command[2] == 1) //read humidity
+      {
+        float h = dht.readHumidity();
+#if HA_REMOTE_LEDENV_DEBUG
+        printf("Humidity: %f\n\r", h);
+#endif        
+        float2Bytes(state, h);
+      }
+      else if (command[2] == 2) //read all
+      {
+        byte tempArray[4];
+        float t = dht.readTemperature();
+        byte humidityArray[4];
+        float h = dht.readHumidity();
+#if HA_REMOTE_LEDENV_DEBUG
+        printf("Temperature: %f\n\r", t);
+        printf("Humidity: %f\n\r", h);
+#endif         
+        float2Bytes(state, t);
+      }
+    }
     for (int i = 0; i < commandAndResponseLength; i++)
     {
       if (i < stateLength)
@@ -146,23 +189,19 @@ void loop(void)
   previousEnableState = enableState;
   enableState = digitalRead(offlineEnablePin);
   if (previousEnableState == LOW && enableState == HIGH)
+  {    
+    ledState[0] = 1;
+    ledState[1] = 0;
+  }  
+  if (ledState[0] == 0) //turn off
   {
-    command[1] = 2;
-    state[0] = 1;
-    state[1] = 0;
+    colorWipe(0,10); 
   }
-  if (command[1] == 2)//RemoteLED
+  else if (ledState[0] == 1) //enable effect
   {
-    if (state[0] == 0) //turn off
+    if (ledState[1] == 0) //rainbowWheel
     {
-      colorWipe(0,10); 
-    }
-    else if (state[0] == 1) //enable effect
-    {
-      if (state[1] == 0) //rainbowWheel
-      {
-        rainbowCycle(50);
-      }
+      rainbowCycle(50);
     }
   }
 }
@@ -188,9 +227,8 @@ void rainbowCycle(uint8_t wait)
     previousEnableState = enableState;
     enableState = digitalRead(offlineEnablePin);
     if (previousEnableState == HIGH && enableState == LOW)
-    {
-      command[1] = 2;
-      state[0] = 0;
+    {      
+      ledState[0] = 0;
       return;
     }
   }
@@ -234,5 +272,18 @@ void checkForBrightnessChange()
       brightness = 127;
     else
       brightness = 255;
+}
+
+void float2Bytes(byte bytes_temp[4], float float_variable)
+{ 
+  union {
+    float a;
+    unsigned char bytes[4];
+  } thing;
+  thing.a = float_variable;
+  for (int i = 0; i < 4; i++)
+  {
+    bytes_temp[i] = thing.bytes[i];
+  }
 }
 
