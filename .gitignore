@@ -1,5 +1,7 @@
 /HomeAtion/homeation_main/crypto.h
+/HomeAtion/homeation_main/thingpspeak.h
 /HomeAtion/homeation_remotepower/crypto.h
+/HomeAtion/homeation_remoteledenv/crypto.h
 # Object files
 *.o
 *.ko

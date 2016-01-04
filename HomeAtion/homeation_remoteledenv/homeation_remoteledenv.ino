@@ -132,7 +132,7 @@ void loop(void)
         { 
           state[2] = ledState[2] = 0;
           state[3] = ledState[2] = 0;         
-        }
+        }        
       }
       else if (command[2] == 2) //read state
       {       
@@ -141,6 +141,13 @@ void loop(void)
           state[i] = ledState[i];
         } 
       } 
+      else if (command[2] == 3) // set color
+      {
+        state[0] = ledState[0] = 3;
+        state[1] = ledState[1] = command[3]; //color to set
+        state[2] = ledState[2] = 0;
+        state[3] = ledState[2] = 0;
+      }
     } 
     else if (command[1] == 3) //DHT
     {
@@ -148,17 +155,23 @@ void loop(void)
       {
         float t = dht.readTemperature();
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("Temperature: %f\n\r", t);
+        char str_temp[6];
+        /* 4 is mininum width, 2 is precision; float value is copied onto str_temp*/
+        dtostrf(t, 4, 2, str_temp);        
+        printf("Temperature: %s C\n\r", str_temp);
 #endif         
-        float2Bytes(state, t);       
+        float2Bytes(state, t, 0, 0);       
       }
       else if (command[2] == 1) //read humidity
       {
         float h = dht.readHumidity();
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("Humidity: %f\n\r", h);
+        char str_humid[6];
+        /* 4 is mininum width, 2 is precision; float value is copied onto str_temp*/
+        dtostrf(h, 4, 2, str_humid);
+        printf("Humidity: %s %\n\r", str_humid);
 #endif        
-        float2Bytes(state, h);
+        float2Bytes(state, h, 0, 0);
       }
       else if (command[2] == 2) //read all
       {
@@ -167,10 +180,15 @@ void loop(void)
         byte humidityArray[4];
         float h = dht.readHumidity();
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("Temperature: %f\n\r", t);
-        printf("Humidity: %f\n\r", h);
+        char str_temp[6];
+        dtostrf(t, 4, 2, str_temp);
+        char str_humid[6];
+        dtostrf(h, 4, 2, str_humid);
+        printf("Temperature: %s C\n\r", str_temp);
+        printf("Humidity: %s %\n\r", str_humid);
 #endif         
-        float2Bytes(state, t);
+        float2Bytes(state, t, 2, 0);
+        float2Bytes(state, h, 2, 2);
       }
     }
     for (int i = 0; i < commandAndResponseLength; i++)
@@ -203,6 +221,15 @@ void loop(void)
     {
       rainbowCycle(50);
     }
+  }
+  else if (ledState[0] == 3) // set color
+  {
+    uint32_t colorToSet;
+    if (ledState[1] == 255)
+      colorToSet = strip.Color((brightness*255)/255,(brightness*255)/255,(brightness*255)/255);
+    else
+      colorToSet = Wheel(ledState[1]);
+    colorWipe(colorToSet, 10);
   }
 }
 
@@ -269,21 +296,23 @@ void checkForBrightnessChange()
 {
   isInNightModeState = digitalRead(nightModePin);
     if (isInNightModeState == HIGH)
-      brightness = 127;
+      brightness = 64;
     else
       brightness = 255;
 }
 
-void float2Bytes(byte bytes_temp[4], float float_variable)
+void float2Bytes(byte bytes_temp[4], float float_variable, int sourceOffset, int destinationOffset)
 { 
   union {
     float a;
     unsigned char bytes[4];
   } thing;
   thing.a = float_variable;
-  for (int i = 0; i < 4; i++)
+  int i = 0 + destinationOffset;
+  int j = 0 + sourceOffset;
+  for (; i < 4 && j < 4; i++, j++)
   {
-    bytes_temp[i] = thing.bytes[i];
+    bytes_temp[i] = thing.bytes[j];
   }
 }
 
