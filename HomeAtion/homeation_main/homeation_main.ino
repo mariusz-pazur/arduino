@@ -8,9 +8,15 @@
 #include "hardware.h"
 #include "aes256.h"
 #include "crypto.h"
+#include "thingspeak.h"
 
 #define STATIC 1
 #define HOME_ATION_DEBUG 0
+
+//add yours in "thingspeak.h"
+//const char thingspeakApiKey[] = "beef1337beef1337" 
+const char thingspeakApiUrl[] PROGMEM = "api.thingspeak.com";
+static void thingspeak_callback (byte status, word off, word len) ;
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -25,8 +31,7 @@ static RemoteDevice remoteDevices[] =
     { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 3, { 2, 3, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
 //    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 4, { 3, 4, 0, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } } 
 };
-static uint8_t myAddress[] = { 
-  0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
+static uint8_t myAddress[] = { 0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
 static uint8_t commandAndResponseLength = 16;
@@ -38,8 +43,7 @@ static byte dnsip[] = { 62,179,1,60 };
 static byte mask[] = { 255,255,255,0 };
 #endif
 static byte broadcastip[] = { 255,255,255,255 };
-static byte mymac[] = { 
-  0x74,0x69,0x69,0x2D,0x30,0x31 };
+static byte mymac[] = {  0x74,0x69,0x69,0x2D,0x30,0x31 };
 byte Ethernet::buffer[500]; 
 BufferFiller bfill;
 static uint8_t ethernetcsPin = 18;
@@ -74,6 +78,7 @@ const char commandErrorInfo[] PROGMEM =
 const char echoRequest[] = "HomeAtionMainRequest";
 const char homeAtionResponse[] = "HomeAtionMain";
 const char echoText[] PROGMEM = "HomeAtionMain";
+const char thingspeakText[] PROGMEM = "Thingspeak POST";
 
 static uint8_t greenLedPin = 3;
 
@@ -101,25 +106,30 @@ void setupRF()
   Mirf.config(); 
 }
 
+static void thingspeak_callback (byte status, word off, word len) 
+{
+//#if HOME_ATION_DEBUG
+//    printf("Callback: status-%d,off-%d,len-%d\n\r", status, off, len);
+//#endif
+}
+
 void udpSerialPrint(word port, byte ip[4], const char *data, word len) 
 {
-#if HOME_ATION_DEBUG
-  printf("UDP packet arrived\n\r");
-  printf("From IP: %d.%d.%d.%d\n\r", ip[0], ip[1], ip[2], ip[3]);  
-  printf("To Port: %d\n\r", port);
-  printf("Data: %s\n\r", data);
-  printf("Data length: %d\n\r", len);
-#endif
+//#if HOME_ATION_DEBUG
+//  printf("S:%d.%d.%d.%d\n\r", ip[0], ip[1], ip[2], ip[3]);  
+//  printf("D:%d\n\r", port);
+//  printf("Data:%s\n\r", data);
+//  printf("L:%d\n\r", len);
+//#endif
   if (strncmp(echoRequest, data, 20) == 0)
   {
-#if HOME_ATION_DEBUG
-    printf("ECHO Request\n\r");
-    printf("Response: %s\n\r", echoText);    
-#endif
+//#if HOME_ATION_DEBUG
+//    printf("Resp:%s\n\r", echoText);    
+//#endif
     ether.sendUdp(homeAtionResponse, sizeof(homeAtionResponse), portMy, broadcastip, portDestination);    
-#if HOME_ATION_DEBUG
-    printf("UDP Response send\n\r");
-#endif    
+//#if HOME_ATION_DEBUG
+//    printf("Send\n\r");
+//#endif    
   } 
 }
 
@@ -129,7 +139,7 @@ void setupEthernet()
   if (ether.begin(sizeof Ethernet::buffer, mymac, ethernetcsPin) == 0) 
   {
 #if HOME_ATION_DEBUG
-    printf("Failed to access Ethernet controller\n\r");
+    printf("Ether f\n\r");
 #endif    
   }
   else
@@ -141,7 +151,7 @@ void setupEthernet()
     if (!ether.dhcpSetup())
     {
 #if HOME_ATION_DEBUG
-      printf("DHCP failed\n\r");
+      printf("DHCP f\n\r");
 #endif      
     }
     else
@@ -150,6 +160,12 @@ void setupEthernet()
     }
 #endif    
     ether.udpServerListenOnPort(&udpSerialPrint, portMy);
+  }
+  if (!ether.dnsLookup(thingspeakApiUrl))
+  {
+#if HOME_ATION_DEBUG
+    printf("DNS f\n\r");
+#endif
   }
 }
 
@@ -166,9 +182,8 @@ void setup()
 #endif
   setupEthernet();  
   setupRF();  
-#if HOME_ATION_DEBUG
-  printf("HomeAtion Main\n\r");
-  printf("Server is at %d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
+#if HOME_ATION_DEBUG 
+  printf("START:%d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
 #endif
   /*lcd.begin(16, 2);
    lcd.clear();
@@ -180,7 +195,7 @@ void setup()
    lcd.print('.');
    lcd.print(ether.myip[3]);*/
 #if HOME_ATION_DEBUG 
-  printf("Free RAM: %d B\n\r", freeRam());     
+  printf("RAM:%d B\n\r", freeRam());     
 #endif
   pinMode(greenLedPin, OUTPUT); 
   setupEncryption(); 
@@ -217,7 +232,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
   for (int i = 0; i< commandAndResponseLength; i++)
     encryptedCommand[i] = commandArray[i]; 
 #ifdef HOME_ATION_DEBUG
-  printf("Now sending (%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
+  printf("Sending(%d-%d-%d)", commandArray[1], commandArray[2], commandArray[3]);
 #endif 
   Mirf.setTADDR(remoteDevices[commandArray[0]].deviceAddress);
   aes256_encrypt_ecb(&ctxt, encryptedCommand);
@@ -233,7 +248,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
     if ( ( millis() - started_waiting_at ) > 5000 ) 
     {
 #if HOME_ATION_DEBUG
-      printf("Timeout on response from server!");
+      printf("Timeout");
 #endif
       return false;
     }
@@ -243,7 +258,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
     Mirf.getData(response);
     aes256_decrypt_ecb(&ctxt, response);				
 #if HOME_ATION_DEBUG
-    printf("Got response {%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
+    printf("Resp{%d,%d,%d,%d}\n\r",response[0],response[1],response[2],response[3]);
 #endif
   }
   return true;		 		
@@ -258,9 +273,6 @@ boolean getCommandFromQuery(char* requestLine, int requestLineLength, byte* comm
     if (ch == '=')
     {      
       commands[parameterNumber] = (byte)atoi(&(requestLine[i+1]));      
-#ifdef HOME_ATION_DEBUG
-      printf("parameter - nr %d - value - %d\n\r", parameterNumber, commands[parameterNumber]);
-#endif
       parameterNumber++;
     }
     if (ch == '\n')
@@ -287,6 +299,19 @@ void commandResponse(byte id, uint8_t* response)
   bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
 }
 
+float bytes2Float(byte bytes_temp[4])
+{ 
+  union {
+    float a;
+    unsigned char bytes[4];
+  } thing;
+  for (int i = 0; i < 4; i++)
+  {
+     thing.bytes[i] = bytes_temp[i];
+  }
+  return thing.a;  
+}
+
 void loop() 
 {  
   delay(10);  
@@ -297,7 +322,7 @@ void loop()
   {
     delay(1);
 #ifdef HOME_ATION_DEBUG
-    printf("new client start\n\r");
+    printf("http start\n\r");
 #endif
     bfill = ether.tcpOffset();
     char *data = (char *) Ethernet::buffer + pos;
@@ -322,6 +347,37 @@ void loop()
         bfill.emit_p(httpOkHeaders);
         commandResponse(command[0], remoteDevices[command[0]].commandResponse);	
         ether.httpServerReply(bfill.position());
+        //thingspeak
+        char valuesToUpdate[54];
+        if (command[0] == 2) //RemoteLedEnv
+        {
+          if (command[1] == 3) //DHT
+          {
+            if (command[2] == 2) //read state
+            {
+              byte envState[4];
+              //temp
+              envState[0] = 0;
+              envState[1] = 0;
+              envState[2] = remoteDevices[command[0]].commandResponse[0];
+              envState[3] = remoteDevices[command[0]].commandResponse[1];
+              float t = bytes2Float(envState);
+              //humidity
+              envState[2] = remoteDevices[command[0]].commandResponse[2];
+              envState[3] = remoteDevices[command[0]].commandResponse[3];
+              float h = bytes2Float(envState);
+              char str_temp[6];
+              dtostrf(t, 4, 2, str_temp);
+              char str_humid[6];
+              dtostrf(h, 4, 2, str_humid);   
+#ifdef HOME_ATION_DEBUG
+              printf("?api_key=%s&field1=%s&field2=%s", thingspeakApiKey, str_temp, str_humid);    
+#endif           
+              sprintf(valuesToUpdate, "?api_key=%s&field1=%s&field2=%s", thingspeakApiKey, str_temp, str_humid);
+              ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);
+            }
+          }
+        }
       }
       else
       {
@@ -367,7 +423,7 @@ void loop()
       ether.httpServerReply(bfill.position());
     }
 #ifdef HOME_ATION_DEBUG
-    printf("new client end\n\r");
+    printf("http end\n\r");
 #endif
   }   
 }
