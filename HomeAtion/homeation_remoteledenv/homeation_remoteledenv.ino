@@ -20,7 +20,7 @@ static byte command[] = {0,0,0,0,
                          0,0,0,0,
                          0,0,0,0};
 
-int ledsPin = 3;
+byte ledsPin = 3;
 boolean hasToTurnOff = false;
 uint8_t stateLength = 4;
 uint8_t state[] = { 0, 0, 0, 0};
@@ -37,9 +37,10 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(7, ledsPin, NEO_GRB + NEO_KHZ800);
 static uint8_t brightness = 255;
 static uint8_t nightModePin = 7;
 static uint8_t offlineEnablePin = 8;
-int isInNightModeState = 0; 
-int enableState = 0;
-int previousEnableState = 0;
+byte isInNightModeState = 0; 
+byte enableState = 0;
+byte previousEnableState = 0;
+uint16_t rainbow_j = 0;
 
 aes256_context ctxt;
 //uint8_t cryptoKey[] = { // set this in crypto.h
@@ -49,17 +50,16 @@ aes256_context ctxt;
 //    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
 //  };  
 
-int dhtPin = 4;
+byte dhtPin = 4;
 DHT dht(dhtPin, DHT11);
 
-int noiseSensorPin = A1;
-short noiseReadsBufferLength = 100;
-short noiseBufferIndex = 0;
-short noiseSensorMeanValue;
-short noiseReadsBuffer[100];
-int noiseMeanReadsDelayInMillis = 60000;
-unsigned long noiseSensorReadsDelayInMillis;
-unsigned long lastSensorRead;
+byte noiseReadsBufferLength = 200;
+byte noiseBufferIndex = 0;
+uint32_t noiseSensorMeanValue;
+uint16_t noiseReadsBuffer[200];
+uint32_t noiseMeanReadsDelayInMillis = 60000;
+uint32_t noiseSensorReadsDelayInMillis;
+uint32_t lastSensorRead;
 
 #define HA_REMOTE_LEDENV_DEBUG 1
 
@@ -108,12 +108,15 @@ void setupLeds()
 
 void setupNoiseSensor()
 {
-  for (int i = 0; i < noiseReadsBufferLength; i++)
+  for (byte i = 0; i < noiseReadsBufferLength; i++)
   {
     noiseReadsBuffer[i] = 0;
   }
   noiseSensorReadsDelayInMillis = noiseMeanReadsDelayInMillis / noiseReadsBufferLength;
   lastSensorRead = millis();
+#if HA_REMOTE_LEDENV_DEBUG
+    printf("NS Delay:%ld,LastRead:%ld\n\r", noiseSensorReadsDelayInMillis, lastSensorRead);
+#endif  
   noiseBufferIndex = 0;
 }
 
@@ -127,7 +130,7 @@ void loop(void)
     // Dump the payloads until we've gotten everything    
     byte response[commandAndResponseLength];    
     bool done = false;
-    for (int i = 0; i < commandAndResponseLength; i++)
+    for (byte i = 0; i < commandAndResponseLength; i++)
     {
       command[i] = 0;
     }
@@ -140,7 +143,7 @@ void loop(void)
     {
       if (command[2] == 0) //turn off 
       { 
-        for (int i = 0; i < stateLength; i++)
+        for (byte i = 0; i < stateLength; i++)
         {
           state[i] = 0;                
           ledState[i] = 0;
@@ -163,7 +166,7 @@ void loop(void)
       }
       else if (command[2] == 2) //read state
       {       
-        for (int i = 0; i < stateLength; i++)
+        for (byte i = 0; i < stateLength; i++)
         {
           state[i] = ledState[i];
         } 
@@ -221,26 +224,36 @@ void loop(void)
     else if (command[1] == 4)
     {
       if (command[2] == 0) // read mean value
-      {
-        int meanSensorValue = calculateMeanNoiseSensorValue();
+      {        
+        uint32_t meanSensorValue = calculateMeanNoiseSensorValue();
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("Mean noise:%d\n\r", meanSensorValue);
+        printf("Mean noise:%ld\n\r", meanSensorValue);
 #endif
-        int2Bytes(state, meanSensorValue);        
+        byte noise = map(meanSensorValue, 0, 1023, 255, 0);
+        state[0] = noise;       
+        for (byte i = 1; i < 4; i++)
+        {
+          state[i] = 0; 
+        }       
       }
       else if (command[2] == 1) //read current value
-      {
-        int sensorValue = analogRead(noiseSensorPin);
+      {        
+        int sensorValue = analogRead(A1);
 #if HA_REMOTE_LEDENV_DEBUG
         printf("Current noise:%d\n\r", sensorValue);
 #endif
-        int2Bytes(state, sensorValue); 
+        byte noise = map(sensorValue, 0, 1023, 255, 0);
+        state[0] = noise;       
+        for (byte i = 1; i < 4; i++)
+        {
+          state[i] = 0; 
+        } 
       }
       else if (command[2] == 2) //change mean reads delay
       {
         noiseMeanReadsDelayInMillis = command[3] * 1000;
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("New mean delay[s]:%d\n\r", command[3]);
+        printf("New mean delay[ms]:%ld\n\r", noiseMeanReadsDelayInMillis);
 #endif
         setupNoiseSensor();
       }
@@ -297,22 +310,21 @@ void loop(void)
 
 void rainbowCycle(uint8_t wait) 
 {
-  uint16_t i, j, k;
-
-  for(j=0; j<256*5; j++) 
+  for(; rainbow_j<256*5; rainbow_j++) 
   { // 5 cycles of all colors on wheel
-    for(i=0; i< strip.numPixels(); i++) 
+    for(int i = 0; i< strip.numPixels(); i++) 
     {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));            
+      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + rainbow_j) & 255));            
     }
     strip.show();
-    for (k=0; k < 5; k++ )
+    for (int k=0; k < 5; k++ )
     {
       delay(wait/5);
       if (!Mirf.isSending() && Mirf.dataReady())
         return;      
     }
     checkForBrightnessChange();
+    checkForNoiseSensorRead();
     previousEnableState = enableState;
     enableState = digitalRead(offlineEnablePin);
     if (previousEnableState == HIGH && enableState == LOW)
@@ -321,19 +333,25 @@ void rainbowCycle(uint8_t wait)
       return;
     }
   }
+  rainbow_j = 0;
 }
 
 void noiseColor()
 {
   while(true)
   {
-    int currentNoise = analogRead(noiseSensorPin);
-    int wheelColor = (1024 - currentNoise)/4;
+    int currentNoise = analogRead(A1);    
+    int wheelColor = map(currentNoise, 0, 1023, 255, 0);
+#if HA_REMOTE_LEDENV_DEBUG
+    printf("Noise: %d,Color: %d\n\r", currentNoise, wheelColor);
+#endif 
     colorWipe(Wheel(wheelColor),1);
     delay(10);
     if (!Mirf.isSending() && Mirf.dataReady())
         return;
     checkForBrightnessChange();
+    checkForNoiseSensorRead();
+    delay(1);
     previousEnableState = enableState;
     enableState = digitalRead(offlineEnablePin);
     if (previousEnableState == HIGH && enableState == LOW)
@@ -399,25 +417,15 @@ void float2Bytes(byte bytes_temp[4], float float_variable, int sourceOffset, int
   }
 }
 
-void int2Bytes(byte bytes_temp[4], int int_variable)
-{ 
-  union {
-    int a;
-    unsigned char bytes[4];
-  } thing;
-  thing.a = int_variable;  
-  for (int i = 0; i < 4; i++)
-  {
-    bytes_temp[i] = thing.bytes[i];
-  }
-}
-
 void checkForNoiseSensorRead()
 {
   unsigned long currentTime = millis();
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("CT:%ld,LR:%ld\n\r", currentTime, lastSensorRead);
+#endif
   if (currentTime - lastSensorRead >= noiseSensorReadsDelayInMillis)
   {    
-    noiseReadsBuffer[noiseBufferIndex] = analogRead(noiseSensorPin);
+    noiseReadsBuffer[noiseBufferIndex] = analogRead(A1);
 #if HA_REMOTE_LEDENV_DEBUG
         printf("Noise[%d]:%d\n\r", noiseBufferIndex, noiseReadsBuffer[noiseBufferIndex]);
 #endif
@@ -430,14 +438,18 @@ void checkForNoiseSensorRead()
   }
 }
 
-int calculateMeanNoiseSensorValue()
+uint32_t calculateMeanNoiseSensorValue()
 {
-  int sum = 0;
-  for (int i = 0; i < noiseReadsBufferLength; i++)
+  uint32_t sum = 0;
+  uint32_t mean;
+  for (byte i = 0; i < noiseReadsBufferLength; i++)
   {
     sum += noiseReadsBuffer[i];
   }
-
+  mean = sum / (uint32_t)noiseReadsBufferLength;
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("Sum: %ld, Mean: %ld\n\r", sum, mean);
+#endif
   return sum / noiseReadsBufferLength;
 }
 
