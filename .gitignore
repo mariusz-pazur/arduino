@@ -26,3 +26,5 @@
 
 *.hex
 HomeAtion/homeation_main2/thingspeak.h
+/HomeAtion/homeation_remoteledenv2/crypto.h
+/HomeAtion/homeation_main2/crypto.h
