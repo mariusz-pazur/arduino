@@ -13,18 +13,18 @@ static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD3};
 static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
-
 static uint8_t commandAndResponseLength = 16;
 static byte command[] = {0,0,0,0,
                          0,0,0,0,
                          0,0,0,0,
                          0,0,0,0};
+uint32_t mainThreadDelayInMillis = 5;
+uint32_t mainThreadLastRun = 0;
 
 byte ledsPin = 3;
-boolean hasToTurnOff = false;
 uint8_t stateLength = 4;
 uint8_t state[] = { 0, 0, 0, 0};
-uint8_t ledState[] = { 0, 0, 0, 0 };
+uint8_t ledState[] = { 0, 0 };
 // Parameter 1 = number of pixels in strip
 // Parameter 2 = pin number (most are valid)
 // Parameter 3 = pixel type flags, add together as needed:
@@ -33,14 +33,15 @@ uint8_t ledState[] = { 0, 0, 0, 0 };
 //   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(7, ledsPin, NEO_GRB + NEO_KHZ800);
-
 static uint8_t brightness = 255;
 static uint8_t nightModePin = 7;
 static uint8_t offlineEnablePin = 8;
 byte isInNightModeState = 0; 
 byte enableState = 0;
 byte previousEnableState = 0;
-uint16_t rainbow_j = 0;
+uint8_t rainbow_j = 0;
+uint32_t ledsLastControl = 0;
+uint32_t ledsControlDelayInMillis = 50;
 
 aes256_context ctxt;
 //uint8_t cryptoKey[] = { // set this in crypto.h
@@ -52,16 +53,16 @@ aes256_context ctxt;
 
 byte dhtPin = 4;
 DHT dht(dhtPin, DHT11);
+uint32_t dhtSensorLastRead = 0;
+uint32_t dhtSensorReadsDelayInMillis = 30000;
 
-byte noiseReadsBufferLength = 200;
-byte noiseBufferIndex = 0;
-uint32_t noiseSensorMeanValue;
-uint16_t noiseReadsBuffer[200];
-uint32_t noiseMeanReadsDelayInMillis = 60000;
-uint32_t noiseSensorReadsDelayInMillis;
-uint32_t lastSensorRead;
+const uint16_t noiseReadsBufferLength = 60;
+uint16_t noiseBufferIndex = 0;
+uint8_t noiseReadsBuffer[noiseReadsBufferLength];
+uint32_t noiseSensorReadsDelayInMillis = 60000 / noiseReadsBufferLength;
+uint32_t noiseSensorLastRead = 0;
 
-#define HA_REMOTE_LEDENV_DEBUG 1
+#define HA_REMOTE_LEDENV_DEBUG 0
 
 void setup(void)
 {
@@ -73,12 +74,12 @@ void setup(void)
   printf("HomeAtion Remote Led Environment (leds & temp & humidity & noise)\n\r");
 #endif
   setupRF(); 
-#if HA_REMOTE_LEDENV_DEBUG
-  printf("Free RAM: %d B\n\r", freeRam()); 
-#endif
   setupEncryption();
   setupLeds();
   setupNoiseSensor();
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("Free RAM: %d B\n\r", freeRam()); 
+#endif
 }
 
 void setupRF(void)
@@ -108,26 +109,83 @@ void setupLeds()
 
 void setupNoiseSensor()
 {
-  for (byte i = 0; i < noiseReadsBufferLength; i++)
+  for (uint16_t i = 0; i < noiseReadsBufferLength; i++)
   {
     noiseReadsBuffer[i] = 0;
-  }
-  noiseSensorReadsDelayInMillis = noiseMeanReadsDelayInMillis / noiseReadsBufferLength;
-  lastSensorRead = millis();
-#if HA_REMOTE_LEDENV_DEBUG
-    printf("NS Delay:%ld,LastRead:%ld\n\r", noiseSensorReadsDelayInMillis, lastSensorRead);
-#endif  
-  noiseBufferIndex = 0;
+  }  
 }
 
-void loop(void)
-{     
+void loop() 
+{
+  if (hasMainIntervalGone())
+  {
+    mainCallback();
+    mainThreadLastRun = millis();
+  }
+  if (hasLedsIntervalGone())
+  {
+    ledsCallback();
+    ledsLastControl = millis();
+  }
+  if (hasMainIntervalGone())
+  {
+    mainCallback();
+    mainThreadLastRun = millis();
+  }
+  if (hasDHTIntervalGone())
+  {
+    dhtCallback();
+    dhtSensorLastRead = millis();
+  }
+  if (hasMainIntervalGone())
+  {
+    mainCallback();
+    mainThreadLastRun = millis();
+  }
+  if (hasNoiseIntervalGone())
+  {
+    noiseCallback();
+    noiseSensorLastRead = millis();
+  }
+}
+
+
+void mainCallback()
+{
   checkForBrightnessChange();
-  checkForNoiseSensorRead();
-  // if there is data ready
+  checkForEnableLeds();
+  checkForCommandArrived();  
+}
+
+void checkForBrightnessChange()
+{
+  isInNightModeState = digitalRead(nightModePin);
+    if (isInNightModeState == HIGH)
+      brightness = 64;
+    else
+      brightness = 255;
+}
+
+void checkForEnableLeds()
+{
+  previousEnableState = enableState;
+  enableState = digitalRead(offlineEnablePin);
+  if (previousEnableState == HIGH && enableState == LOW)
+  {      
+    ledState[0] = 1;
+    ledState[1] = 0;
+  }
+  else if (previousEnableState == LOW && enableState == HIGH)
+  {
+    ledState[0] = 2;
+    ledState[1] = 0;
+  }
+}
+
+void checkForCommandArrived()
+{
   if(!Mirf.isSending() && Mirf.dataReady())
   {
-    // Dump the payloads until we've gotten everything    
     byte response[commandAndResponseLength];    
     bool done = false;
     for (byte i = 0; i < commandAndResponseLength; i++)
@@ -138,228 +196,127 @@ void loop(void)
     aes256_decrypt_ecb(&ctxt, command);   
 #if HA_REMOTE_LEDENV_DEBUG
     printf("Read command from radio {%d,%d,%d}\n\r", command[1],command[2],command[3]);
-#endif    
-    if (command[1] == 2)//RemoteLED
+#endif 
+    if (command[1] == 2)//RemoteLedEnv
     {
-      if (command[2] == 0) //turn off 
-      { 
-        for (byte i = 0; i < stateLength; i++)
-        {
-          state[i] = 0;                
-          ledState[i] = 0;
-        }
-      }
-      else if (command[2] == 1) //enableEffect
-      {    
-        state[0] = ledState[0] = 1;
-        state[1] = ledState[1] = command[3];      
-        if (command[3] == 0) //rainbowWheel
-        { 
-          state[2] = ledState[2] = 0;
-          state[3] = ledState[2] = 0;         
-        }  
-        else if (command[3] == 1) //color == noise
-        {
-          state[2] = ledState[2] = 0;
-          state[3] = ledState[2] = 0;       
-        }
-      }
-      else if (command[2] == 2) //read state
-      {       
-        for (byte i = 0; i < stateLength; i++)
-        {
-          state[i] = ledState[i];
-        } 
-      } 
-      else if (command[2] == 3) // set color
+      if (command[2] == 1) //LEDs Off
       {
-        state[0] = ledState[0] = 3;
-        state[1] = ledState[1] = command[3]; //color to set
-        state[2] = ledState[2] = 0;
-        state[3] = ledState[2] = 0;
-      }      
-    } 
-    else if (command[1] == 3) //DHT
-    {
-      if (command[2] == 0) //read temp
+        ledState[0] =  command[2];
+        ledState[1] = state[3] = command[3];        
+      }
+      else if (command[2] == 2) //LEDs Effect
       {
-        float t = dht.readTemperature();
-#if HA_REMOTE_LEDENV_DEBUG
-        char str_temp[6];
-        /* 4 is mininum width, 2 is precision; float value is copied onto str_temp*/
-        dtostrf(t, 4, 2, str_temp);        
-        printf("Temperature: %s C\n\r", str_temp);
-#endif         
-        float2Bytes(state, t, 0, 0);       
+        ledState[0] = command[2];
+        ledState[1] = command[3];
+        state[3] = 1;
       }
-      else if (command[2] == 1) //read humidity
+      else if (command[2] == 3) //Leds set color
       {
-        float h = dht.readHumidity();
-#if HA_REMOTE_LEDENV_DEBUG
-        char str_humid[6];
-        /* 4 is mininum width, 2 is precision; float value is copied onto str_temp*/
-        dtostrf(h, 4, 2, str_humid);
-        printf("Humidity: %s %\n\r", str_humid);
-#endif        
-        float2Bytes(state, h, 0, 0);
+        ledState[0] = command[2];
+        ledState[1] = command[3];
+        state[3] = 2;
       }
-      else if (command[2] == 2) //read all
+      for (int i = 0; i < commandAndResponseLength; i++)
       {
-        byte tempArray[4];
-        float t = dht.readTemperature();
-        byte humidityArray[4];
-        float h = dht.readHumidity();
-#if HA_REMOTE_LEDENV_DEBUG
-        char str_temp[6];
-        dtostrf(t, 4, 2, str_temp);
-        char str_humid[6];
-        dtostrf(h, 4, 2, str_humid);
-        printf("Temperature: %s C\n\r", str_temp);
-        printf("Humidity: %s %\n\r", str_humid);
-#endif         
-        float2Bytes(state, t, 2, 0);
-        float2Bytes(state, h, 2, 2);
+        if (i < stateLength)
+          response[i] = state[i];    
+        else
+          response[i] = 0;
       }
-    }
-    else if (command[1] == 4)
-    {
-      if (command[2] == 0) // read mean value
-      {        
-        uint32_t meanSensorValue = calculateMeanNoiseSensorValue();
+      aes256_encrypt_ecb(&ctxt, response);
+      Mirf.send(response);
 #if HA_REMOTE_LEDENV_DEBUG
-        printf("Mean noise:%ld\n\r", meanSensorValue);
-#endif
-        byte noise = map(meanSensorValue, 0, 1023, 255, 0);
-        state[0] = noise;       
-        for (byte i = 1; i < 4; i++)
-        {
-          state[i] = 0; 
-        }       
-      }
-      else if (command[2] == 1) //read current value
-      {        
-        int sensorValue = analogRead(A1);
-#if HA_REMOTE_LEDENV_DEBUG
-        printf("Current noise:%d\n\r", sensorValue);
-#endif
-        byte noise = map(sensorValue, 0, 1023, 255, 0);
-        state[0] = noise;       
-        for (byte i = 1; i < 4; i++)
-        {
-          state[i] = 0; 
-        } 
-      }
-      else if (command[2] == 2) //change mean reads delay
-      {
-        noiseMeanReadsDelayInMillis = command[3] * 1000;
-#if HA_REMOTE_LEDENV_DEBUG
-        printf("New mean delay[ms]:%ld\n\r", noiseMeanReadsDelayInMillis);
-#endif
-        setupNoiseSensor();
-      }
-    }
-    for (int i = 0; i < commandAndResponseLength; i++)
-    {
-      if (i < stateLength)
-        response[i] = state[i];    
-      else
-        response[i] = 0;
-    }
-    aes256_encrypt_ecb(&ctxt, response);
-    Mirf.send(response);
-#if HA_REMOTE_LEDENV_DEBUG
-    printf("Sent state response {%d,%d,%d,%d}\n\r", state[0],state[1],state[2],state[3]);
-#endif         
-  } 
-  previousEnableState = enableState;
-  enableState = digitalRead(offlineEnablePin);
-  if (previousEnableState == LOW && enableState == HIGH)
-  {    
-    ledState[0] = 1;
-    ledState[1] = 0;
-  }  
-  else if (previousEnableState == HIGH && enableState == LOW)
-  {      
-    ledState[0] = 0;      
+      printf("Sent state response {%d,%d,%d,%d}\n\r", state[0],state[1],state[2],state[3]);
+#endif  
+    }    
   }
-  if (ledState[0] == 0) //turn off
+}     
+
+void dhtCallback()
+{
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+#if HA_REMOTE_LEDENV_DEBUG
+  char str_temp[6];
+  dtostrf(t, 4, 2, str_temp);
+  char str_humid[6];
+  dtostrf(h, 4, 2, str_humid);
+  printf("Temp: %s C\n\r", str_temp);
+  printf("Humid: %s %\n\r", str_humid);
+#endif         
+  state[0] = byte(t);
+  state[1] = byte(h);         
+}
+
+void noiseCallback()
+{
+  int sensorValue = analogRead(A1);
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("Noise:%d\n\r", sensorValue);
+#endif
+  byte noise = map(sensorValue, 0, 1023, 255, 0);
+  noiseReadsBuffer[noiseBufferIndex] = noise;
+#if HA_REMOTE_LEDENV_DEBUG
+   printf("Noise_M[%d]:%d\n\r", noiseBufferIndex, noiseReadsBuffer[noiseBufferIndex]);
+#endif
+   noiseBufferIndex++;
+   if(noiseBufferIndex == noiseReadsBufferLength)
+   {
+     noiseBufferIndex = 0;
+     state[2] = calculateMeanNoiseSensorValue();
+   }
+}
+
+byte calculateMeanNoiseSensorValue()
+{
+  uint32_t sum = 0;
+  byte mean;
+  for (uint16_t i = 0; i < noiseReadsBufferLength; i++)
   {
-    colorWipe(0,10); 
+    sum += noiseReadsBuffer[i];
   }
-  else if (ledState[0] == 1) //enable effect
+  mean = sum / noiseReadsBufferLength;
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("Sum: %ld, Mean: %d\n\r", sum, mean);
+#endif
+  return mean;
+}
+
+void ledsCallback()
+{
+  if (ledState[0] == 1 && ledState[1] == 0) //OFF
   {
-    if (ledState[1] == 0) //rainbowWheel
+    colorWipe(0);
+    state[3] = 0;
+  }
+  else if (ledState[0] == 2) //Effects
+  {
+    if (ledState[1] == 0) //RainbowWheel
     {
-      rainbowCycle(50);
-    }
-    else if (ledState[1] == 1) //color == noise
-    {
-      noiseColor();
+      rainbowLeds();
+      state[3] = 1;
     }
   }
-  else if (ledState[0] == 3) // set color
+  else if (ledState[0] == 3) //Set Color
   {
     uint32_t colorToSet;
     if (ledState[1] == 255)
       colorToSet = strip.Color((brightness*255)/255,(brightness*255)/255,(brightness*255)/255);
     else
       colorToSet = Wheel(ledState[1]);
-    colorWipe(colorToSet, 10);
+    colorWipe(colorToSet);
+    state[3] = 2;
   }
 }
 
-void rainbowCycle(uint8_t wait) 
+void rainbowLeds() 
 {
-  for(; rainbow_j<256*5; rainbow_j++) 
-  { // 5 cycles of all colors on wheel
-    for(int i = 0; i< strip.numPixels(); i++) 
-    {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + rainbow_j) & 255));            
-    }
-    strip.show();
-    for (int k=0; k < 5; k++ )
-    {
-      delay(wait/5);
-      if (!Mirf.isSending() && Mirf.dataReady())
-        return;      
-    }
-    checkForBrightnessChange();
-    checkForNoiseSensorRead();
-    previousEnableState = enableState;
-    enableState = digitalRead(offlineEnablePin);
-    if (previousEnableState == HIGH && enableState == LOW)
-    {      
-      ledState[0] = 0;
-      return;
-    }
-  }
-  rainbow_j = 0;
-}
-
-void noiseColor()
-{
-  while(true)
+  rainbow_j++;
+  for(int i = 0; i< strip.numPixels(); i++) 
   {
-    int currentNoise = analogRead(A1);    
-    int wheelColor = map(currentNoise, 0, 1023, 255, 0);
-#if HA_REMOTE_LEDENV_DEBUG
-    printf("Noise: %d,Color: %d\n\r", currentNoise, wheelColor);
-#endif 
-    colorWipe(Wheel(wheelColor),1);
-    delay(10);
-    if (!Mirf.isSending() && Mirf.dataReady())
-        return;
-    checkForBrightnessChange();
-    checkForNoiseSensorRead();
-    delay(1);
-    previousEnableState = enableState;
-    enableState = digitalRead(offlineEnablePin);
-    if (previousEnableState == HIGH && enableState == LOW)
-    {      
-      ledState[0] = 0;
-      return;
-    }
+    strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + rainbow_j) & 255));            
   }
+  strip.show();    
 }
 
 // Input a value 0 to 255 to get a color value.
@@ -383,73 +340,38 @@ uint32_t Wheel(byte WheelPos)
 }
 
 // Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) 
+void colorWipe(uint32_t c) 
 {
   for(uint16_t i=0; i<strip.numPixels(); i++) 
   {
-      strip.setPixelColor(i, c);
-      strip.show();
-      delay(wait);
+      strip.setPixelColor(i, c);           
   }
+  strip.show();
 }
 
-void checkForBrightnessChange()
+bool hasIntervalGone(uint32_t lastRead, uint32_t millisBetweenReads)
 {
-  isInNightModeState = digitalRead(nightModePin);
-    if (isInNightModeState == HIGH)
-      brightness = 64;
-    else
-      brightness = 255;
+  return (lastRead + millisBetweenReads) <= millis();
 }
 
-void float2Bytes(byte bytes_temp[4], float float_variable, int sourceOffset, int destinationOffset)
-{ 
-  union {
-    float a;
-    unsigned char bytes[4];
-  } thing;
-  thing.a = float_variable;
-  int i = 0 + destinationOffset;
-  int j = 0 + sourceOffset;
-  for (; i < 4 && j < 4; i++, j++)
-  {
-    bytes_temp[i] = thing.bytes[j];
-  }
-}
-
-void checkForNoiseSensorRead()
+bool hasMainIntervalGone()
 {
-  unsigned long currentTime = millis();
-#if HA_REMOTE_LEDENV_DEBUG
-  printf("CT:%ld,LR:%ld\n\r", currentTime, lastSensorRead);
-#endif
-  if (currentTime - lastSensorRead >= noiseSensorReadsDelayInMillis)
-  {    
-    noiseReadsBuffer[noiseBufferIndex] = analogRead(A1);
-#if HA_REMOTE_LEDENV_DEBUG
-        printf("Noise[%d]:%d\n\r", noiseBufferIndex, noiseReadsBuffer[noiseBufferIndex]);
-#endif
-    noiseBufferIndex++;
-    if(noiseBufferIndex == noiseReadsBufferLength)
-    {
-      noiseBufferIndex = 0;
-    }
-    lastSensorRead = currentTime;
-  }
+  return hasIntervalGone(mainThreadLastRun, mainThreadDelayInMillis);
 }
 
-uint32_t calculateMeanNoiseSensorValue()
+bool hasLedsIntervalGone()
 {
-  uint32_t sum = 0;
-  uint32_t mean;
-  for (byte i = 0; i < noiseReadsBufferLength; i++)
-  {
-    sum += noiseReadsBuffer[i];
-  }
-  mean = sum / (uint32_t)noiseReadsBufferLength;
-#if HA_REMOTE_LEDENV_DEBUG
-  printf("Sum: %ld, Mean: %ld\n\r", sum, mean);
-#endif
-  return sum / noiseReadsBufferLength;
+  return hasIntervalGone(ledsLastControl, ledsControlDelayInMillis);
 }
+
+bool hasDHTIntervalGone()
+{
+  return hasIntervalGone(dhtSensorLastRead, dhtSensorReadsDelayInMillis);
+}
+
+bool hasNoiseIntervalGone()
+{
+  return hasIntervalGone(noiseSensorLastRead, noiseSensorReadsDelayInMillis);
+}
+
 

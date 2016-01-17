@@ -28,9 +28,7 @@ struct RemoteDevice {
 static RemoteDevice remoteDevices[] = 
 {    
     { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD2 }, 1, { 0, 1, 3, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 2, { 1, 2, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 3, { 2, 3, 2, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } },
-    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 4, { 3, 4, 0, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } } 
+    { { 0xF0, 0xF0, 0xF0, 0xF0, 0xD3 }, 2, { 1, 2, 0, 0 }, { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 } }   
 };
 static uint8_t myAddress[] = { 0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
 static uint8_t rf24cePin = 9;
@@ -212,21 +210,11 @@ void setup()
 //	      - 5 - disable all
 //        - 6 - set state - commandArray[3] - param - flaga z bitami odpowiadającymi stanom portów
 
-//commandArray[1] - type - 2 - RemoteLED
-//commandArray[2] - cmd - 0 - turn off
-//                      - 1 - enable effect - commandArray[3] - param - 0(rainbow wheel)
-//                      - 2 - read state {X1, X2, X3, X4}, X1 == 0 --> turned off; X1 == 1 --> effect enabled, X2 --> effect number (0 - rainbow wheel)
-
-//commandArray[1] - type - 3 - RemoteDHT
-//commandArray[2] - cmd - 0 - read temp
-//                      - 1 - read humidity
-//                      - 2 - read all
-
-//commandArray[1] - type - 4 - RemoteNoise
-//commandArray[2] - cmd - 0 - read mean in time (default or set )
-//                      - 1 - read current value
-//                      - 2 - change mean reads delay (param - delay in seconds)
-
+//commandArray[1] - type - 2 - RemoteLEDEnv
+//commandArray[2] - cmd - 0 - read state {X1, X2, X3, X4}, X1 --> temp; X2 --> humid; X3 --> noise; X4 --> LEDs
+//                      - 1 - LEDs Off
+//                      - 2 - LEDs Effects (param - 0 --> RainbowWheel)
+//                      - 3 - Set LEDs Color (param - color)
 
 boolean sendRF24Command(byte* commandArray, uint8_t* response)
 {    
@@ -255,7 +243,7 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
       return false;
     }
   }
-  if (commandArray[1] == 1 || commandArray[1] == 2 || commandArray[1] == 3 || commandArray[1] == 4)//Remote Power Strip || Remote LED || DHT11 || NoiseSensor
+  if (commandArray[1] == 1 || commandArray[1] == 2)//Remote Power Strip || Remote LEDEnv
   {
     Mirf.getData(response);
     aes256_decrypt_ecb(&ctxt, response);				
@@ -301,32 +289,6 @@ void commandResponse(byte id, uint8_t* response)
   bfill.emit_p(deviceJson, id, remoteDevices[id].deviceType, response[0], response[1], response[2], response[3]);  
 }
 
-float bytes2Float(byte bytes_temp[4])
-{ 
-  union {
-    float a;
-    unsigned char bytes[4];
-  } thing;
-  for (int i = 0; i < 4; i++)
-  {
-     thing.bytes[i] = bytes_temp[i];
-  }
-  return thing.a;  
-}
-
-int bytes2Int(byte bytes_temp[2])
-{ 
-  union {
-    int a;
-    unsigned char bytes[2];
-  } thing;
-  for (int i = 0; i < 2; i++)
-  {
-     thing.bytes[i] = bytes_temp[i];
-  }
-  return thing.a;  
-}
-
 void loop() 
 {  
   delay(10);  
@@ -364,60 +326,32 @@ void loop()
         ether.httpServerReply(bfill.position());
         //thingspeak
         
-        char valuesToUpdate[54];
-        if (command[0] == 2 || command[0] == 3) //RemoteLedEnv
+        char valuesToUpdate[70];
+        if (command[0] == 1) //RemoteLedEnv
         {
-          if (command[1] == 3) //DHT
-          {
-            if (command[2] == 2) //read state
-            {
-              byte envState[4];
-              //temp
-              envState[0] = 0;
-              envState[1] = 0;
-              envState[2] = remoteDevices[command[0]].commandResponse[0];
-              envState[3] = remoteDevices[command[0]].commandResponse[1];
-              float t = bytes2Float(envState);
-              //humidity
-              envState[2] = remoteDevices[command[0]].commandResponse[2];
-              envState[3] = remoteDevices[command[0]].commandResponse[3];
-              float h = bytes2Float(envState);
-              char str_temp[6];
-              dtostrf(t, 4, 2, str_temp);
-              char str_humid[6];
-              dtostrf(h, 4, 2, str_humid);   
+          if (command[1] == 2) //Read State
+          {              
 #ifdef HOME_ATION_DEBUG
-              printf("?api_key=%s&field1=%s&field2=%s", thingspeakApiKey, str_temp, str_humid);    
+              printf("?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
+                thingspeakApiKey, 
+                remoteDevices[command[0]].commandResponse[0], 
+                remoteDevices[command[0]].commandResponse[1], 
+                remoteDevices[command[0]].commandResponse[2], 
+                remoteDevices[command[0]].commandResponse[3]);    
 #endif           
-              sprintf(valuesToUpdate, "?api_key=%s&field1=%s&field2=%s", thingspeakApiKey, str_temp, str_humid);
+              sprintf(valuesToUpdate, "?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
+                thingspeakApiKey, 
+                remoteDevices[command[0]].commandResponse[0], 
+                remoteDevices[command[0]].commandResponse[1], 
+                remoteDevices[command[0]].commandResponse[2], 
+                remoteDevices[command[0]].commandResponse[3]);
               if (checkThingspeakUrl)
               {
                 ether.dnsLookup(thingspeakApiUrl);
               }
               checkThingspeakUrl = true;
-              ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);
-            }
-          }
-          else if (command[1] == 4) //Noise
-          {
-            if (command[2] == 0) //Read Mean
-            {
-              byte noise[2];
-              noise[0] = remoteDevices[command[0]].commandResponse[3];
-              noise[1] = remoteDevices[command[0]].commandResponse[2];
-              int n = bytes2Int(noise);
-#ifdef HOME_ATION_DEBUG
-              printf("?api_key=%s&field3=%d", thingspeakApiKey, n);    
-#endif           
-              sprintf(valuesToUpdate, "?api_key=%s&field3=%d", thingspeakApiKey, n);
-              if (checkThingspeakUrl)
-              {
-                ether.dnsLookup(thingspeakApiUrl);
-              }
-              checkThingspeakUrl = true;
-              ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);
-            }
-          }
+              ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);            
+          }          
         }
       }
       else
