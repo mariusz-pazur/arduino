@@ -16,7 +16,9 @@
 //add yours in "thingspeak.h"
 //const char thingspeakApiKey[] = "beef1337beef1337" 
 const char thingspeakApiUrl[] PROGMEM = "api.thingspeak.com";
-bool checkThingspeakUrl = false;
+bool checkEthernetModule = true;
+uint32_t ethernetModuleLastSuccessfulCall = 0;
+uint32_t thingSpeakLastCall = 0;
 static void thingspeak_callback (byte status, word off, word len) ;
 
 struct RemoteDevice {
@@ -43,7 +45,7 @@ static byte mask[] = { 255,255,255,0 };
 #endif
 static byte broadcastip[] = { 255,255,255,255 };
 static byte mymac[] = {  0x74,0x69,0x69,0x2D,0x30,0x31 };
-byte Ethernet::buffer[500]; 
+byte Ethernet::buffer[450]; 
 BufferFiller bfill;
 static uint8_t ethernetcsPin = 18;
 unsigned int portMy = 40000; 
@@ -106,9 +108,10 @@ void setupRF()
 
 static void thingspeak_callback (byte status, word off, word len) 
 {
-  checkThingspeakUrl = false;
+  checkEthernetModule = false;
+  ethernetModuleLastSuccessfulCall = millis();
 #if HOME_ATION_DEBUG
-    printf("Callback: status-%d,off-%d,len-%d\n\r", status, off, len);
+  printf("Callback: status-%d,off-%d,len-%d\n\r", status, off, len);
 #endif
 }
 
@@ -134,7 +137,7 @@ void udpSerialPrint(word port, byte ip[4], const char *data, word len)
 
 void setupEthernet()
 {
-  
+  digitalWrite(greenLedPin, HIGH);
   if (ether.begin(sizeof Ethernet::buffer, mymac, ethernetcsPin) == 0) 
   {
 #if HOME_ATION_DEBUG
@@ -179,6 +182,7 @@ void setup()
   Serial.begin(57600);  
   printf_begin();
 #endif
+  pinMode(greenLedPin, OUTPUT); 
   setupEthernet();  
   setupRF();  
 #if HOME_ATION_DEBUG 
@@ -192,12 +196,11 @@ void setup()
    lcd.print('.');
    lcd.print(ether.myip[2]);
    lcd.print('.');
-   lcd.print(ether.myip[3]);*/
-#if HOME_ATION_DEBUG 
+   lcd.print(ether.myip[3]);*/  
+  setupEncryption(); 
+#if HOME_ATION_DEBUG   
   printf("RAM:%d B\n\r", freeRam());     
 #endif
-  pinMode(greenLedPin, OUTPUT); 
-  setupEncryption(); 
 }
 
 //commandArray[0] - id - indeks w tablicy adresďż˝w
@@ -235,10 +238,10 @@ boolean sendRF24Command(byte* commandArray, uint8_t* response)
   unsigned long started_waiting_at = millis();
   while(!Mirf.dataReady())
   {    
-    if ( ( millis() - started_waiting_at ) > 5000 ) 
+    if ( ( millis() - started_waiting_at ) > 2000 ) 
     {
 #if HOME_ATION_DEBUG
-      printf("Timeout");
+      printf("Timeout\n\r");
 #endif
       return false;
     }
@@ -291,7 +294,47 @@ void commandResponse(byte id, uint8_t* response)
 
 void loop() 
 {  
-  delay(10);  
+  delay(5);
+  if (checkEthernetModule && (ethernetModuleLastSuccessfulCall + 300000 <= millis()))
+  {
+      setupEthernet();            
+  }  
+  if (thingSpeakLastCall + 60000 <= millis())
+  {
+      byte command[] = {1, 2, 0, 0};
+      byte response[] {0, 0, 0, 0}; 
+      int numberOfRetries = 3;
+      bool hasCommandReturn = false;
+      while(!hasCommandReturn && numberOfRetries > 0)
+      {
+        numberOfRetries--;
+        hasCommandReturn = sendRF24Command(command, response);    
+      }
+      if (hasCommandReturn)
+      {
+        char valuesToUpdate[70];
+#ifdef HOME_ATION_DEBUG
+        printf("?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d\n\r", 
+          thingspeakApiKey, 
+          response[0], 
+          response[1], 
+          response[2], 
+          response[3]);    
+#endif           
+        sprintf(valuesToUpdate, "?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
+          thingspeakApiKey, 
+          response[0], 
+          response[1], 
+          response[2], 
+          response[3]);   
+          checkEthernetModule = true;     
+          ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);
+          thingSpeakLastCall = millis(); 
+#ifdef HOME_ATION_DEBUG
+      printf("TC-%ld\n\r", thingSpeakLastCall);
+#endif    
+      }
+  }
   boolean hasCommandSend = false;
   word len = ether.packetReceive();
   word pos = ether.packetLoop(len); 
@@ -299,18 +342,18 @@ void loop()
   {
     delay(1);
 #ifdef HOME_ATION_DEBUG
-    printf("http start\n\r");
+    printf("ST-%ld\n\r", millis());
 #endif
     bfill = ether.tcpOffset();
     char *data = (char *) Ethernet::buffer + pos;
-#ifdef HOME_ATION_DEBUG
-    printf(data);		
-#endif
+//#ifdef HOME_ATION_DEBUG
+//    printf(data);		
+//#endif
     if (strncmp("GET /command", data, 12) == 0)
     {
-#ifdef HOME_ATION_DEBUG
-      printf("\n\rcommand\n\r");		
-#endif
+//#ifdef HOME_ATION_DEBUG
+//      printf("\n\rcommand\n\r");		
+//#endif
       byte command[commandAndResponseLength];
       boolean hasParameters = getCommandFromQuery(data, len, command);
       int numberOfRetries = 3;
@@ -323,36 +366,7 @@ void loop()
       {
         bfill.emit_p(httpOkHeaders);
         commandResponse(command[0], remoteDevices[command[0]].commandResponse);	
-        ether.httpServerReply(bfill.position());
-        //thingspeak
-        
-        char valuesToUpdate[70];
-        if (command[0] == 1) //RemoteLedEnv
-        {
-          if (command[1] == 2) //Read State
-          {              
-#ifdef HOME_ATION_DEBUG
-              printf("?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
-                thingspeakApiKey, 
-                remoteDevices[command[0]].commandResponse[0], 
-                remoteDevices[command[0]].commandResponse[1], 
-                remoteDevices[command[0]].commandResponse[2], 
-                remoteDevices[command[0]].commandResponse[3]);    
-#endif           
-              sprintf(valuesToUpdate, "?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
-                thingspeakApiKey, 
-                remoteDevices[command[0]].commandResponse[0], 
-                remoteDevices[command[0]].commandResponse[1], 
-                remoteDevices[command[0]].commandResponse[2], 
-                remoteDevices[command[0]].commandResponse[3]);
-              if (checkThingspeakUrl)
-              {
-                ether.dnsLookup(thingspeakApiUrl);
-              }
-              checkThingspeakUrl = true;
-              ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);            
-          }          
-        }
+        ether.httpServerReply(bfill.position());        
       }
       else
       {
@@ -398,7 +412,7 @@ void loop()
       ether.httpServerReply(bfill.position());
     }
 #ifdef HOME_ATION_DEBUG
-    printf("http end\n\r");
+    printf("END-%ld\n\r\n\r", millis());
 #endif
   }   
 }
