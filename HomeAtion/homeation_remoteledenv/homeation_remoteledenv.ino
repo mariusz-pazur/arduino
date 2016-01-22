@@ -18,7 +18,7 @@ static byte command[] = {0,0,0,0,
                          0,0,0,0,
                          0,0,0,0,
                          0,0,0,0};
-uint32_t mainThreadDelayInMillis = 5;
+const uint32_t mainThreadDelayInMillis = 2;
 uint32_t mainThreadLastRun = 0;
 
 byte ledsPin = 3;
@@ -53,14 +53,19 @@ aes256_context ctxt;
 
 byte dhtPin = 4;
 DHT dht(dhtPin, DHT11);
-uint32_t dhtSensorLastRead = 0;
-uint32_t dhtSensorReadsDelayInMillis = 30000;
 
-const uint16_t noiseReadsBufferLength = 60;
+const uint16_t noiseReadsBufferLength = 600;
 uint16_t noiseBufferIndex = 0;
 uint8_t noiseReadsBuffer[noiseReadsBufferLength];
 uint32_t noiseSensorReadsDelayInMillis = 60000 / noiseReadsBufferLength;
 uint32_t noiseSensorLastRead = 0;
+
+const uint8_t noiseForLedsBufferLength = 200;
+uint8_t noiseForLedsBufferIndex = 0;
+uint8_t noiseForLedsBuffer[noiseForLedsBufferLength];
+uint16_t noiseForLedsReadsDelayInMillis = 5;
+uint32_t noiseForLedsLastRead = 0;
+bool noiseChangeBrightness = false;
 
 #define HA_REMOTE_LEDENV_DEBUG 0
 
@@ -121,31 +126,25 @@ void loop()
   {
     mainCallback();
     mainThreadLastRun = millis();
+#if HA_REMOTE_LEDENV_DEBUG
+    printf("Main: %ld \n\r", mainThreadLastRun); 
+#endif
   }
   if (hasLedsIntervalGone())
   {
     ledsCallback();
     ledsLastControl = millis();
-  }
-  if (hasMainIntervalGone())
-  {
-    mainCallback();
-    mainThreadLastRun = millis();
-  }
-  if (hasDHTIntervalGone())
-  {
-    dhtCallback();
-    dhtSensorLastRead = millis();
-  }
-  if (hasMainIntervalGone())
-  {
-    mainCallback();
-    mainThreadLastRun = millis();
-  }
-  if (hasNoiseIntervalGone())
+#if HA_REMOTE_LEDENV_DEBUG
+    printf("LEDs: %ld \n\r", ledsLastControl); 
+#endif
+  }    
+  if (hasNoiseForLedsIntervalGone())
   {
     noiseCallback();
-    noiseSensorLastRead = millis();
+    noiseForLedsLastRead = millis();
+#if HA_REMOTE_LEDENV_DEBUG
+    printf("NoiseInt: %ld \n\r", noiseForLedsLastRead); 
+#endif
   }
 }
 
@@ -199,22 +198,33 @@ void checkForCommandArrived()
 #endif 
     if (command[1] == 2)//RemoteLedEnv
     {
+      if (command[2] == 0)
+      {
+        readDht();
+      }
       if (command[2] == 1) //LEDs Off
       {
-        ledState[0] =  command[2];
+        noiseChangeBrightness = false;
+        ledState[0] = command[2];
         ledState[1] = state[3] = command[3];        
       }
       else if (command[2] == 2) //LEDs Effect
       {
+        noiseChangeBrightness = false;
         ledState[0] = command[2];
         ledState[1] = command[3];
         state[3] = 1;
       }
       else if (command[2] == 3) //Leds set color
       {
+        noiseChangeBrightness = false;
         ledState[0] = command[2];
         ledState[1] = command[3];
         state[3] = 2;
+      }
+      else if (command[2] == 4) //Noise Changes brightness
+      {
+        noiseChangeBrightness = true;
       }
       for (int i = 0; i < commandAndResponseLength; i++)
       {
@@ -232,7 +242,7 @@ void checkForCommandArrived()
   }
 }     
 
-void dhtCallback()
+void readDht()
 {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
@@ -242,10 +252,13 @@ void dhtCallback()
   char str_humid[6];
   dtostrf(h, 4, 2, str_humid);
   printf("Temp: %s C\n\r", str_temp);
-  printf("Humid: %s %\n\r", str_humid);
+  printf("Humid: %s %%\n\r", str_humid);
 #endif         
   state[0] = byte(t);
-  state[1] = byte(h);         
+  state[1] = byte(h);  
+#if HA_REMOTE_LEDENV_DEBUG
+  printf("Free RAM: %d B\n\r", freeRam()); 
+#endif       
 }
 
 void noiseCallback()
@@ -255,35 +268,56 @@ void noiseCallback()
   printf("Noise:%d\n\r", sensorValue);
 #endif
   byte noise = map(sensorValue, 0, 1023, 255, 0);
-  noiseReadsBuffer[noiseBufferIndex] = noise;
+  if (hasNoiseIntervalGone())
+  {
+    noiseReadsBuffer[noiseBufferIndex] = noise;
 #if HA_REMOTE_LEDENV_DEBUG
-   printf("Noise_M[%d]:%d\n\r", noiseBufferIndex, noiseReadsBuffer[noiseBufferIndex]);
+    printf("Noise_M[%d]:%d\n\r", noiseBufferIndex, noiseReadsBuffer[noiseBufferIndex]);
 #endif
-   noiseBufferIndex++;
-   if(noiseBufferIndex == noiseReadsBufferLength)
-   {
-     noiseBufferIndex = 0;
-     state[2] = calculateMeanNoiseSensorValue();
-   }
+    noiseBufferIndex++;
+    if(noiseBufferIndex == noiseReadsBufferLength)
+    {
+      noiseBufferIndex = 0;
+      state[2] = calculateMeanNoiseSensorValue();
+    }
+  }
+  noiseForLedsBuffer[noiseForLedsBufferIndex] = noise;
+  noiseForLedsBufferIndex++;
+  if (noiseForLedsBufferIndex == noiseForLedsBufferLength)
+  {
+    noiseForLedsBufferIndex = 0;
+  }
 }
 
-byte calculateMeanNoiseSensorValue()
+byte calculateMeanBufferValue(byte buf[], uint16_t bufLength)
 {
   uint32_t sum = 0;
   byte mean;
-  for (uint16_t i = 0; i < noiseReadsBufferLength; i++)
+  for (uint16_t i = 0; i < bufLength; i++)
   {
-    sum += noiseReadsBuffer[i];
+    sum += buf[i];
   }
-  mean = sum / noiseReadsBufferLength;
+  mean = sum / bufLength;
 #if HA_REMOTE_LEDENV_DEBUG
   printf("Sum: %ld, Mean: %d\n\r", sum, mean);
 #endif
   return mean;
 }
 
+byte calculateMeanNoiseForLedsValue()
+{
+  return calculateMeanBufferValue(noiseForLedsBuffer, noiseForLedsBufferLength);    
+}
+
+byte calculateMeanNoiseSensorValue()
+{
+  return calculateMeanBufferValue(noiseReadsBuffer, noiseReadsBufferLength);  
+}
+
 void ledsCallback()
 {
+  if (noiseChangeBrightness)
+    brightness = calculateMeanNoiseForLedsValue();
   if (ledState[0] == 1 && ledState[1] == 0) //OFF
   {
     colorWipe(0);
@@ -296,6 +330,11 @@ void ledsCallback()
       rainbowLeds();
       state[3] = 1;
     }
+    else if (ledState[1] == 1) //NoiseColor
+    {
+      colorWipe(Wheel(calculateMeanNoiseForLedsValue()));
+      state[3] = 2;
+    }
   }
   else if (ledState[0] == 3) //Set Color
   {
@@ -305,7 +344,7 @@ void ledsCallback()
     else
       colorToSet = Wheel(ledState[1]);
     colorWipe(colorToSet);
-    state[3] = 2;
+    state[3] = 3;
   }
 }
 
@@ -364,14 +403,14 @@ bool hasLedsIntervalGone()
   return hasIntervalGone(ledsLastControl, ledsControlDelayInMillis);
 }
 
-bool hasDHTIntervalGone()
-{
-  return hasIntervalGone(dhtSensorLastRead, dhtSensorReadsDelayInMillis);
-}
-
 bool hasNoiseIntervalGone()
 {
   return hasIntervalGone(noiseSensorLastRead, noiseSensorReadsDelayInMillis);
+}
+
+bool hasNoiseForLedsIntervalGone()
+{
+  return hasIntervalGone(noiseForLedsLastRead, noiseForLedsReadsDelayInMillis);
 }
 
 
