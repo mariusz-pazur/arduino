@@ -3,23 +3,23 @@
 #include <Mirf.h>
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
-//#include <LiquidCrystal.h>
 #include "printf.h"
 #include "hardware.h"
 #include "aes256.h"
 #include "crypto.h"
-#include "thingspeak.h"
 
 #define STATIC 1
-#define HOME_ATION_DEBUG 0
+#define HOME_ATION_DEBUG 1
 
-//add yours in "thingspeak.h"
-//const char thingspeakApiKey[] = "beef1337beef1337" 
-const char thingspeakApiUrl[] PROGMEM = "api.thingspeak.com";
+const char domoticzApiUrl[] PROGMEM = "192.168.0.252";
+//const char domoticzTempHumidSensorRequestParameters[] PROGMEM = "?type=command&param=udevice&idx=5&nvalue=0&svalue=%d;%d;0";//57
+//const char domoticzNoiseSensorRequestParameters[] PROGMEM = "?type=command&param=udevice&idx=13&nvalue=0&svalue=%d";//53
+//const char domoticzSwitchRequestParameters[] PROGMEM = "?type=command&param=switchlight&idx=4&switchcmd=Set Level&level=%d";//69
+//const char domoticzHomeAtionRemoteLedEnvUpdateParameters[] PROGMEM = "?type=command&param=udevices&script=HomeAtionRemoteLedEnv_parser.lua&temp=%d&humid=%d&noise=%d&leds=%d";
 bool checkEthernetModule = true;
 uint32_t ethernetModuleLastSuccessfulCall = 0;
-uint32_t thingSpeakLastCall = 0;
-static void thingspeak_callback (byte status, word off, word len) ;
+uint32_t domoticzLastCall = 0;
+static void domoticz_callback (byte status, word off, word len);
 
 struct RemoteDevice {
   uint8_t deviceAddress[5];
@@ -82,8 +82,6 @@ const char echoText[] PROGMEM = "HomeAtionMain";
 
 static uint8_t greenLedPin = 3;
 
-//LiquidCrystal lcd(12,11,5,4,3,2);
-
 aes256_context ctxt;
 //add your own in crypto.h
 //uint8_t cryptoKey[] = { 
@@ -106,7 +104,7 @@ void setupRF()
   Mirf.config(); 
 }
 
-static void thingspeak_callback (byte status, word off, word len) 
+static void domoticz_callback (byte status, word off, word len) 
 {
   checkEthernetModule = false;
   ethernetModuleLastSuccessfulCall = millis();
@@ -115,7 +113,8 @@ static void thingspeak_callback (byte status, word off, word len)
 #endif
 }
 
-void udpSerialPrint(word port, byte ip[4], const char *data, word len) 
+void udpSerialPrint( uint16_t dest_port, uint8_t src_ip[4], uint16_t src_port, const char *data, uint16_t len)
+  //word port, byte ip[4], const char *data, word len) 
 {
 //#if HOME_ATION_DEBUG
 //  printf("S:%d.%d.%d.%d\n\r", ip[0], ip[1], ip[2], ip[3]);  
@@ -162,13 +161,13 @@ void setupEthernet()
     }
 #endif    
     ether.udpServerListenOnPort(&udpSerialPrint, portMy);
-  }
-  if (!ether.dnsLookup(thingspeakApiUrl))
-  {
+    if (!ether.dnsLookup(domoticzApiUrl))
+    {
 #if HOME_ATION_DEBUG
-    printf("DNS f\n\r");
+      printf("DNS f\n\r");
 #endif
-  }
+    }    
+  }  
 }
 
 void setupEncryption()
@@ -187,16 +186,7 @@ void setup()
   setupRF();  
 #if HOME_ATION_DEBUG 
   printf("START:%d.%d.%d.%d\n\r", ether.myip[0], ether.myip[1], ether.myip[2], ether.myip[3]);  
-#endif
-  /*lcd.begin(16, 2);
-   lcd.clear();
-   lcd.print(ether.myip[0]);
-   lcd.print('.');
-   lcd.print(ether.myip[1]);
-   lcd.print('.');
-   lcd.print(ether.myip[2]);
-   lcd.print('.');
-   lcd.print(ether.myip[3]);*/  
+#endif 
   setupEncryption(); 
 #if HOME_ATION_DEBUG   
   printf("RAM:%d B\n\r", freeRam());     
@@ -299,7 +289,7 @@ void loop()
   {
       setupEthernet();            
   }  
-  if (thingSpeakLastCall + 60000 <= millis())
+  if (domoticzLastCall + 60000 <= millis())
   {
       byte command[] = {1, 2, 0, 0};
       byte response[] {0, 0, 0, 0}; 
@@ -311,27 +301,25 @@ void loop()
         hasCommandReturn = sendRF24Command(command, response);    
       }
       if (hasCommandReturn)
-      {
-        char valuesToUpdate[70];
+      {        
+        char domoticzRequest[110];     
 #ifdef HOME_ATION_DEBUG
-        printf("?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d\n\r", 
-          thingspeakApiKey, 
+        printf("t=%d&h=%d&n=%d&l=%d\n\r",          
           response[0], 
           response[1], 
           response[2], 
           response[3]);    
-#endif           
-        sprintf(valuesToUpdate, "?api_key=%s&field1=%d&field2=%d&field3=%d&field4=%d", 
-          thingspeakApiKey, 
-          response[0], 
-          response[1], 
-          response[2], 
-          response[3]);   
-          checkEthernetModule = true;     
-          ether.browseUrl(PSTR("/update"), valuesToUpdate, thingspeakApiUrl, thingspeak_callback);
-          thingSpeakLastCall = millis(); 
+#endif                        
+        sprintf(domoticzRequest, "?type=command&param=udevices&script=HomeAtionRemoteLedEnv_parser.lua&temp=%d&humid=%d&noise=%d&leds=%d", response[0], response[1], response[2], response[3]*10);
 #ifdef HOME_ATION_DEBUG
-      printf("TC-%ld\n\r", thingSpeakLastCall);
+        printf(domoticzRequest);
+        printf("\n\r");
+#endif
+        checkEthernetModule = true;     
+        ether.browseUrl(PSTR("/json.htm"), domoticzRequest, domoticzApiUrl, domoticz_callback);
+        domoticzLastCall = millis();         
+#ifdef HOME_ATION_DEBUG                                                                  
+        printf("TC-%ld\n\r", domoticzLastCall);
 #endif    
       }
   }
