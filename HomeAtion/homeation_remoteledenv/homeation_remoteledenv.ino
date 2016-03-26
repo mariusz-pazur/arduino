@@ -6,11 +6,9 @@
 #include "DHT.h"
 #include "printf.h"
 #include "hardware.h"
-#include "aes256.h"
-#include "crypto.h"
 
-static uint8_t myAddress[] =  {0xF0, 0xF0, 0xF0, 0xF0, 0xD3};
-static uint8_t mainAddress[] = {0xF0, 0xF0, 0xF0, 0xF0, 0xE1 };
+static uint8_t myAddress[] =  {0x4C, 0x44, 0x45, 0x56, 0x31}; //LDEV1
+static uint8_t mainAddress[] = {0x52, 0x50, 0x49, 0x32, 0x34 }; //RPI24
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
 static uint8_t commandAndResponseLength = 16;
@@ -43,14 +41,6 @@ uint8_t rainbow_j = 0;
 uint32_t ledsLastControl = 0;
 uint32_t ledsControlDelayInMillis = 50;
 
-aes256_context ctxt;
-//uint8_t cryptoKey[] = { // set this in crypto.h
-//    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-//    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-//    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-//    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-//  };  
-
 byte dhtPin = 4;
 DHT dht(dhtPin, DHT11);
 
@@ -68,18 +58,18 @@ uint32_t noiseForLedsLastRead = 0;
 bool noiseChangeBrightness = false;
 
 #define HA_REMOTE_LEDENV_DEBUG 0
+#define HA_REMOTE_LEDENV_NRF_DEBUG 0
 
 void setup(void)
 {
   pinMode(nightModePin, INPUT);
   pinMode(offlineEnablePin, INPUT);
-#if HA_REMOTE_LEDENV_DEBUG
+#if HA_REMOTE_LEDENV_NRF_DEBUG
   Serial.begin(57600);
   printf_begin();
   printf("HomeAtion Remote Led Environment (leds & temp & humidity & noise)\n\r");
 #endif
-  setupRF(); 
-  setupEncryption();
+  setupRF();   
   setupLeds();
   setupNoiseSensor();
 #if HA_REMOTE_LEDENV_DEBUG
@@ -98,12 +88,8 @@ void setupRF(void)
   Mirf.payload = commandAndResponseLength;
   Mirf.channel = 90;
   Mirf.configRegister( RF_SETUP, ( 1<<2 | 1<<1 | 1<<5 ) );
+  Mirf.configRegister( SETUP_RETR, 0b11111);
   Mirf.config();
-}
-
-void setupEncryption()
-{  
-  aes256_init(&ctxt, cryptoKey);          
 }
 
 void setupLeds()
@@ -191,9 +177,8 @@ void checkForCommandArrived()
     {
       command[i] = 0;
     }
-    Mirf.getData(command);  
-    aes256_decrypt_ecb(&ctxt, command);   
-#if HA_REMOTE_LEDENV_DEBUG
+    Mirf.getData(command);       
+#if HA_REMOTE_LEDENV_NRF_DEBUG
     printf("Read command from radio {%d,%d,%d}\n\r", command[1],command[2],command[3]);
 #endif 
     if (command[1] == 2)//RemoteLedEnv
@@ -232,10 +217,9 @@ void checkForCommandArrived()
           response[i] = state[i];    
         else
           response[i] = 0;
-      }
-      aes256_encrypt_ecb(&ctxt, response);
+      }      
       Mirf.send(response);
-#if HA_REMOTE_LEDENV_DEBUG
+#if HA_REMOTE_LEDENV_NRF_DEBUG
       printf("Sent state response {%d,%d,%d,%d}\n\r", state[0],state[1],state[2],state[3]);
 #endif  
     }    
