@@ -16,21 +16,22 @@ static byte command[] = {0,0,0,0,
                          0,0,0,0,
                          0,0,0,0,
                          0,0,0,0};
-static byte response[] = {0,0,0,0,//ID,TYPE,COMMAND,0
-                         0,0,0,0,//LEDS
-                         0,0,0,0,//DHT22
-                         0,0,0,0};//BUZZER
+static byte response[] = {0,0,0,0,//ID,TYPE,COMMAND,0 - 0-3
+                         0,0,0,0,0,0,//LEDS - 4-9
+                         0,0,0,0,//DHT22 - 10-13
+                         0,0};//BUZZER - 14-15
 const uint32_t radioThreadDelayInMillis = 2;
 uint32_t radioThreadLastRun = 0;
 
-byte ledsPin = 18;
+byte ledsPin = 2;
 byte ledsNumber = 33;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(ledsNumber, ledsPin, NEO_GRB + NEO_KHZ800);
 uint8_t rainbow_j = 0;
-uint8_t countingStartTimeInMillis;
+uint32_t countingStartTimeInMillis;
 uint32_t ledsThreadLastRun = 0;
 uint32_t ledsThreadDelayInMillis = 50;
 bool isLedsChanging = false;
+byte brightness = 255;
 
 byte dhtPin = 7;
 DHT_nonblocking dht(dhtPin, DHT_TYPE_22);
@@ -54,20 +55,22 @@ static Song songs[] =
     { { 'c', 'd', 'f', 'd', 'a', ' ', 'a', 'g', ' ', 'c', 'd', 'f', 'd', 'g', ' ', 'g', 'f', ' ', 'X' }, {1, 1, 1, 1, 1, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 4, 4, 2}, 18, 100 }      
 };
 
-
-#define HA_REMOTE_LEDDHTBUZZ_DEBUG 0
+#define HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG 0
 #define HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG 1
+#define HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG 1
+#define HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG 1
+#define HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG 1
 
 void setup(void)
 {  
-#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
   Serial.begin(57600);
   printf_begin();
   printf("HomeAtion Remote Led DHT & Sound (leds & temp & humidity & buzzer)\n\r");
 #endif
   setupRF();   
   setupLeds();  
-#if HA_REMOTE_LEDDHTBUZZ_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
   printf("Free RAM: %d B\n\r", freeRam()); 
 #endif
 }
@@ -94,12 +97,12 @@ void setupLeds()
 }
 
 void loop() 
-{
+{  
   if (hasRadioIntervalGone())
   {
     radioCallback();
     radioThreadLastRun = millis();
-#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG
     printf("Radio: %ld \n\r", radioThreadLastRun); 
 #endif
   }
@@ -107,7 +110,7 @@ void loop()
   {
     ledsCallback();
     ledsThreadLastRun = millis();
-#if HA_REMOTE_LEDDHTBUZZ_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG
     printf("LEDs: %ld \n\r", ledsThreadLastRun); 
 #endif
   }  
@@ -116,7 +119,7 @@ void loop()
     if (dhtCallback())
     {
       dhtThreadLastRun = millis();
-#if HA_REMOTE_LEDDHTBUZZ_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG
       printf("DHT: %ld \n\r", dhtThreadLastRun); 
 #endif
     }
@@ -125,7 +128,7 @@ void loop()
   {
     buzzerCallback();
     buzzerThreadLastRun = millis();
-#if HA_REMOTE_LEDDHTBUZZ_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG
     printf("Buzzer: %ld \n\r", buzzerThreadLastRun); 
 #endif
   }   
@@ -141,7 +144,7 @@ void radioCallback()
       command[i] = 0;
     }
     Mirf.getData(command);       
-#if HA_REMOTE_LEDENV_NRF_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG
     printf("Read command from radio {");
     for (byte i = 0; i < commandAndResponseLength; i++)
     {
@@ -159,7 +162,7 @@ void radioCallback()
       { 
         isLedsChanging = true; 
         countingStartTimeInMillis = millis();      
-        for (byte i = 4; i < 8; i++)
+        for (byte i = 4; i < 10; i++)
         {
           response[i] = command[i];
         }
@@ -168,7 +171,7 @@ void radioCallback()
       {  
         lastNoteCall = 0;
         lastNoteIndex = 0;      
-        for (byte i = 8; i < 12; i++)
+        for (byte i = 14; i < 16; i++)
         {
           response[i] = command[i];
         }
@@ -195,11 +198,11 @@ bool dhtCallback()
   {    
     int16_t temp = (int16_t)(t*100);
     int16_t humid = (int16_t)(h*100);
-    response[8] = (temp & 0xFF00) >> 8;  
-    response[9] = (temp & 0x00FF);
-    response[10] = (humid & 0xFF00) >> 8;  
-    response[11] = (humid & 0x00FF);
-  #if HA_REMOTE_LEDDHTBUZZ_DEBUG
+    response[10] = (temp & 0xFF00) >> 8;  
+    response[11] = (temp & 0x00FF);
+    response[12] = (humid & 0xFF00) >> 8;  
+    response[13] = (humid & 0x00FF);
+  #if HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG
     char str_temp[6];
     dtostrf(t, 4, 2, str_temp);
     char str_humid[6];
@@ -208,32 +211,53 @@ bool dhtCallback()
     printf("Humid: %s %%\n\r", str_humid);
   #endif  
   }  
-
+  else
+  {
+#if HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG
+    printf("DHT measure error\n\r");
+#endif
+  }
   return measureResult;
 }
 
 void ledsCallback()
 {  
   if (isLedsChanging)
-  {
+  {    
     if (response[4] == 0) //OFF
     {
+      brightness = 255;
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+      printf("Leds Off\n\r");
+#endif
       colorWipe(0);  
       isLedsChanging = false;  
     }
     else if (response[4] == 1) //Effects
-    {
+    {      
       if (response[5] == 0) //RainbowWheel
       {
+        brightness = 100;
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+      printf("Rainbow Leds\n\r");
+#endif
         rainbowLeds();        
       }    
       else if (response[5] == 1) //Counting
       {
-        countingLeds(response[6], response[7]);
+        brightness = 255;
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+      printf("Counting Leds\n\r");
+#endif
+        countingLeds(response[6], response[7], response[8], response[9]);
       }
     }
     else if (response[4] == 2) //Set Color
     {
+      brightness = 255;
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+      printf("Set Color Leds\n\r");
+#endif
       uint32_t colorToSet = strip.Color(response[5],response[6],response[7]);
       colorWipe(colorToSet);
       isLedsChanging = false;      
@@ -251,20 +275,28 @@ void rainbowLeds()
   strip.show();    
 }
 
-void countingLeds(byte timeInMinutes, byte colorFromWheel) 
+void countingLeds(byte timeInMinutes, byte colorR, byte colorG, byte colorB) 
 {
-  byte millisForLed = timeInMinutes*60*1000 / ledsNumber;
-  byte numberOfPixelsToShow = (millis()-countingStartTimeInMillis)/millisForLed;
-  if (numberOfPixelsToShow > ledsNumber)
-    numberOfPixelsToShow = ledsNumber;
+  uint16_t millisForLed = (uint16_t)((float)timeInMinutes*60*1000 /(float)ledsNumber);
+  int16_t numberOfPixelsToShow = ledsNumber - (int16_t)((float)(millis()-countingStartTimeInMillis)/(float)millisForLed);
+  uint32_t color = strip.Color(colorR, colorG, colorB);
+  if (numberOfPixelsToShow < 0)
+    numberOfPixelsToShow = 0;
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+      printf("Counting Leds - st:%ld,tm:%d,cr:%ld,ml:%d,np:%d\n\r", countingStartTimeInMillis, timeInMinutes, color, millisForLed, numberOfPixelsToShow);
+#endif
   for(int i = 0; i< numberOfPixelsToShow; i++) 
   {
-    strip.setPixelColor(i, Wheel(colorFromWheel));            
+    strip.setPixelColor(i, color);            
+  }
+  for (int j = numberOfPixelsToShow; j < ledsNumber; j++)
+  {
+    strip.setPixelColor(j, 0);
   }
   strip.show(); 
-  if (numberOfPixelsToShow == ledsNumber)
+  if (numberOfPixelsToShow == 0)
   {
-    response[8] = 1;
+    //response[14] = 1;
     response[4] = 0; 
   }
 }
@@ -275,17 +307,17 @@ uint32_t Wheel(byte WheelPos)
 {
   if(WheelPos < 85) 
   {
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+    return strip.Color((brightness * WheelPos * 3)/255, (brightness * (255 - WheelPos * 3))/255, 0);
   } 
   else if(WheelPos < 170) 
   {
     WheelPos -= 85;
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+    return strip.Color((brightness * (255 - WheelPos * 3))/255, 0, (brightness * WheelPos * 3)/255);
   } 
   else 
   {
     WheelPos -= 170;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+    return strip.Color(0, (brightness * WheelPos * 3)/255, (brightness * (255 - WheelPos * 3))/255);
   }
 }
 
@@ -301,13 +333,18 @@ void colorWipe(uint32_t c)
 
 void buzzerCallback()
 {
-  int songIndex = response[8] - 1;
-  if (response[8] > 0)
+  int songIndex = response[14] - 1;
+  if (response[14] > 0)
   {
-    
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer On\n\r");
+#endif
     int duration = songs[songIndex].beats[lastNoteIndex] * songs[songIndex].tempo;  // length of note/rest in ms
     if (!hasPlayStarted)
     {
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer Start Playing\n\r");
+#endif
       hasPlayStarted = true;
       lastNoteIndex = 0;
       lastNoteCall = millis();
@@ -315,6 +352,9 @@ void buzzerCallback()
     }
     else if (hasPlayStarted && (lastNoteCall + duration > millis()))
     {
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer Continue Playing\n\r");
+#endif
       lastNoteIndex++;
       if (lastNoteIndex < songs[songIndex].songLength)
       {
@@ -322,24 +362,36 @@ void buzzerCallback()
         if (songs[songIndex].notes[lastNoteIndex] == ' ')
         {
           //rest
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer Continue Playing - Rest\n\r");
+#endif
         }
         else if (songs[songIndex].notes[lastNoteIndex] == 'X')
         {
           //end of song
           hasPlayStarted = false;
-          response[8] = 0;
+          response[14] = 0;
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer Continue Playing - End\n\r");
+#endif
         }
         else
         {
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer Continue Playing - New Note\n\r");
+#endif
           //new note
           tone(buzzerPin, frequency(songs[songIndex].notes[lastNoteIndex]), songs[songIndex].beats[lastNoteIndex] * songs[songIndex].tempo);
         }
       }
       else
       {
+#if HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+    printf("Buzzer End Playing\n\r");
+#endif
         //end of song
         hasPlayStarted = false;
-        response[8] = 0;
+        response[14] = 0;
       }
     }          
   }
