@@ -63,14 +63,14 @@ static Song songs[] =
 
 void setup(void)
 {  
-#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG || HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
   Serial.begin(57600);
   printf_begin();
   printf("HomeAtion Remote Led DHT & Sound (leds & temp & humidity & buzzer)\n\r");
 #endif
   setupRF();   
   setupLeds();  
-#if HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
+#if HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG || HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG || HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG || HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG || HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG
   printf("Free RAM: %d B\n\r", freeRam()); 
 #endif
 }
@@ -154,6 +154,10 @@ void radioCallback()
 #endif 
     if (command[1] == 3)//TYPE-RemoteLedDhtBuzz
     {
+      for (byte i = 0; i < 4; i++)
+      {
+        response[i] = command[i];
+      }
       if (command[2] == 0) //DHT
       {
         
