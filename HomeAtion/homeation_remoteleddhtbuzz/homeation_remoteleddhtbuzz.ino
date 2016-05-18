@@ -23,15 +23,19 @@ static byte response[] = {0,0,0,0,//ID,TYPE,COMMAND,0 - 0-3
 const uint32_t radioThreadDelayInMillis = 2;
 uint32_t radioThreadLastRun = 0;
 
-byte ledsPin = 2;
-byte ledsNumber = 33;
+const byte ledsPin = 2;
+const byte ledsNumber = 33;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(ledsNumber, ledsPin, NEO_GRB + NEO_KHZ800);
 uint8_t rainbow_j = 0;
 uint32_t countingStartTimeInMillis;
 uint32_t ledsThreadLastRun = 0;
-uint32_t ledsThreadDelayInMillis = 50;
+const uint32_t ledsThreadDelayInMillis = 50;
 bool isLedsChanging = false;
 byte brightness = 255;
+const uint8_t knightRiderWidth = 12;
+uint32_t old_val[ledsNumber];
+int8_t knightRiderCurrentPixel = 0;
+int8_t knightRiderDirection = 1;
 
 byte dhtPin = 7;
 DHT_nonblocking dht(dhtPin, DHT_TYPE_22);
@@ -255,6 +259,14 @@ void ledsCallback()
 #endif
         countingLeds(response[6], response[7], response[8], response[9]);
       }
+      else if (response[5] == 2) //KnightRider
+      {
+#if HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG
+        printf("Knight Rider\n\r");
+#endif
+        uint32_t colorToSet = strip.Color(response[6],response[7],response[8]);
+        knightRider(colorToSet);
+      }
     }
     else if (response[4] == 2) //Set Color
     {
@@ -305,6 +317,44 @@ void countingLeds(byte timeInMinutes, byte colorR, byte colorG, byte colorB)
   }
 }
 
+void knightRider(uint32_t color) 
+{     
+  if (knightRiderDirection > 0)
+  {
+    strip.setPixelColor(knightRiderCurrentPixel, color);
+    old_val[knightRiderCurrentPixel] = color;
+    for(int x = knightRiderCurrentPixel; x>0; x--) 
+    {
+      old_val[x-1] = dimColor(old_val[x-1], knightRiderWidth);
+      strip.setPixelColor(x-1, old_val[x-1]);
+    }
+    strip.show(); 
+    knightRiderCurrentPixel += knightRiderDirection;
+    if (knightRiderCurrentPixel >= ledsNumber)
+    {
+      knightRiderCurrentPixel = ledsNumber-1;
+      knightRiderDirection = -knightRiderDirection;
+    }       
+  }
+  else
+  { 
+    strip.setPixelColor(knightRiderCurrentPixel, color);
+    old_val[knightRiderCurrentPixel] = color;
+    for(int x = knightRiderCurrentPixel; x<=ledsNumber ;x++) 
+    {
+      old_val[x-1] = dimColor(old_val[x-1], knightRiderWidth);
+      strip.setPixelColor(x+1, old_val[x+1]);
+    }
+    strip.show(); 
+    knightRiderCurrentPixel += knightRiderDirection;
+    if (knightRiderCurrentPixel < 0)
+    {
+      knightRiderCurrentPixel = 0;
+      knightRiderDirection = -knightRiderDirection;
+    }           
+  }
+}
+
 // Input a value 0 to 255 to get a color value.
 // The colours are a transition r - g - b - back to r.
 uint32_t Wheel(byte WheelPos) 
@@ -333,6 +383,11 @@ void colorWipe(uint32_t c)
       strip.setPixelColor(i, c);           
   }
   strip.show();
+}
+
+uint32_t dimColor(uint32_t color, uint8_t width) 
+{
+  return (((color&0xFF0000)/width)&0xFF0000) + (((color&0x00FF00)/width)&0x00FF00) + (((color&0x0000FF)/width)&0x0000FF);
 }
 
 void buzzerCallback()

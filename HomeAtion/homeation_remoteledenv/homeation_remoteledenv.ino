@@ -23,21 +23,25 @@ static byte response[] = {0,0,0,0,//ID,TYPE,COMMAND,0 - 0-3
 const uint32_t mainThreadDelayInMillis = 2;
 uint32_t mainThreadLastRun = 0;
 
-byte ledsPin = 3;
-byte ledsNumber = 7;
+const byte ledsPin = 3;
+const byte ledsNumber = 44;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(ledsNumber, ledsPin, NEO_GRB + NEO_KHZ800);
-static uint8_t nightModePin = 7;
-static uint8_t offlineEnablePin = 8;
+const uint8_t nightModePin = 7;
+const uint8_t offlineEnablePin = 8;
 byte previousBrightness = 0;
 byte currentNightModeState = 0; 
 byte enableState = 0;
 byte previousEnableState = 0;
 uint8_t rainbow_j = 0;
 uint32_t ledsThreadLastRun = 0;
-uint32_t ledsThreadDelayInMillis = 50;
+const uint32_t ledsThreadDelayInMillis = 50;
 bool isLedsChanging = false;
+const uint8_t knightRiderWidth = 16;
+uint32_t old_val[ledsNumber];
+int8_t knightRiderCurrentPixel = 0;
+int8_t knightRiderDirection = 1;
 
-byte dhtPin = 4;
+const byte dhtPin = 4;
 DHT_nonblocking dht(dhtPin, DHT_TYPE_22);
 const uint32_t dhtThreadDelayInMillis = 30000;
 uint32_t dhtThreadLastRun = 0;
@@ -45,21 +49,21 @@ uint32_t dhtThreadLastRun = 0;
 const uint16_t noiseReadsBufferLength = 600;
 uint16_t noiseBufferIndex = 0;
 uint8_t noiseReadsBuffer[noiseReadsBufferLength];
-uint32_t noiseSensorReadsDelayInMillis = 60000 / noiseReadsBufferLength;
+const uint32_t noiseSensorReadsDelayInMillis = 60000 / noiseReadsBufferLength;
 uint32_t noiseSensorLastRead = 0;
 
 const uint8_t noiseForLedsBufferLength = 200;
 uint8_t noiseForLedsBufferIndex = 0;
 uint8_t noiseForLedsBuffer[noiseForLedsBufferLength];
-uint16_t noiseForLedsReadsDelayInMillis = 5;
+const uint16_t noiseForLedsReadsDelayInMillis = 5;
 uint32_t noiseForLedsLastRead = 0;
 bool noiseChangeBrightness = false;
 
 #define HA_REMOTE_LEDENV_LOOP_DEBUG 0
-#define HA_REMOTE_LEDENV_NRF_DEBUG 1
+#define HA_REMOTE_LEDENV_NRF_DEBUG 0
 #define HA_REMOTE_LEDENV_LEDS_DEBUG 0
 #define HA_REMOTE_LEDENV_DHT_DEBUG 0
-#define HA_REMOTE_LEDENV_NOISE_DEBUG 1
+#define HA_REMOTE_LEDENV_NOISE_DEBUG 0
 
 void setup(void)
 {
@@ -162,7 +166,7 @@ void checkForBrightnessChange()
     previousBrightness = response[9];
     currentNightModeState = digitalRead(nightModePin);          
     if (currentNightModeState == HIGH)
-      response[9] = 64;
+      response[9] = 127;
     else
       response[9] = 255;
     if (response[9] != previousBrightness)
@@ -356,6 +360,11 @@ void ledsCallback()
       {
         colorWipe(Wheel(calculateMeanNoiseForLedsValue()));        
       }
+      else if (response[5] == 2) //KnightRider
+      {
+        uint32_t colorToSet = strip.Color((response[9]*response[6])/255,(response[9]*response[7])/255,(response[9]*response[8])/255);
+        knightRider(colorToSet);
+      }
     }
     else if (response[4] == 2) //Set Color
     {      
@@ -407,6 +416,49 @@ void colorWipe(uint32_t c)
       strip.setPixelColor(i, c);           
   }
   strip.show();
+}
+
+void knightRider(uint32_t color) 
+{     
+  if (knightRiderDirection > 0)
+  {
+    strip.setPixelColor(knightRiderCurrentPixel, color);
+    old_val[knightRiderCurrentPixel] = color;
+    for(int x = knightRiderCurrentPixel; x>0; x--) 
+    {
+      old_val[x-1] = dimColor(old_val[x-1], knightRiderWidth);
+      strip.setPixelColor(x-1, old_val[x-1]);
+    }
+    strip.show(); 
+    knightRiderCurrentPixel += knightRiderDirection;
+    if (knightRiderCurrentPixel >= ledsNumber)
+    {
+      knightRiderCurrentPixel = ledsNumber-1;
+      knightRiderDirection = -knightRiderDirection;
+    }       
+  }
+  else
+  { 
+    strip.setPixelColor(knightRiderCurrentPixel, color);
+    old_val[knightRiderCurrentPixel] = color;
+    for(int x = knightRiderCurrentPixel; x<=ledsNumber ;x++) 
+    {
+      old_val[x-1] = dimColor(old_val[x-1], knightRiderWidth);
+      strip.setPixelColor(x+1, old_val[x+1]);
+    }
+    strip.show(); 
+    knightRiderCurrentPixel += knightRiderDirection;
+    if (knightRiderCurrentPixel < 0)
+    {
+      knightRiderCurrentPixel = 0;
+      knightRiderDirection = -knightRiderDirection;
+    }           
+  }
+}
+
+uint32_t dimColor(uint32_t color, uint8_t width) 
+{
+  return (((color&0xFF0000)/width)&0xFF0000) + (((color&0x00FF00)/width)&0x00FF00) + (((color&0x0000FF)/width)&0x0000FF);
 }
 
 bool hasIntervalGone(uint32_t lastRead, uint32_t millisBetweenReads)
