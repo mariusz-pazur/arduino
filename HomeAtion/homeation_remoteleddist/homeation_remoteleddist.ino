@@ -7,7 +7,9 @@
 #include "printf.h"
 #include "hardware.h"
 
-static uint8_t myAddress[] =  {0x4C, 0x44, 0x53, 0x54, 0x31}; //LDST1
+#define arr_len( x )  ( sizeof( x ) / sizeof( *x ) )
+
+static uint8_t myAddress[] =  {0x4C, 0x44, 0x53, 0x5A, 0x31}; //LDSZ1
 static uint8_t mainAddress[] = {0x52, 0x50, 0x49, 0x32, 0x34 }; //RPI24
 static uint8_t rf24cePin = 9;
 static uint8_t rf24csnPin = 10;
@@ -22,14 +24,21 @@ static byte response[] = {0,0,0,0,//ID,TYPE,COMMAND,0 - 0-3
                          0,0};//NOISE_VALUE,NOISE_BRIGHTNESS - 14-15
 const uint32_t mainThreadDelayInMillis = 2;
 uint32_t mainThreadLastRun = 0;
-static byte currentDayLeds[][2] = { {0, 1}, {3, 3}, {5, 6},
-                                   {7, 8}, {10, 10}, {12, 13},
-                                   {14, 15}, {17, 17}, {19, 20},
-                                   {21, 22}, {24, 24}, {26, 27},
-                                   {28, 29}, {31, 31}, {33, 34},
-                                   {35, 36}, {38, 38}, {40, 41},
-                                   {42, 43}, {45, 45}, {47, 48},
-                                   {49, 50}, {52, 52}, {54, 55} };
+static byte currentDayLeds[][2] = { {0, 2}, {2, 4}, {4, 6},
+                                   {7, 9}, {9, 11}, {11, 13},
+                                   {14, 16}, {16, 18}, {18, 20},
+                                   {21, 23}, {23, 25}, {25, 27},
+                                   {28, 30}, {30, 32}, {32, 34},
+                                   {35, 37}, {37, 39}, {39, 41},
+                                   {42, 44}, {44, 46}, {46, 48},
+                                   {49, 51}, {51, 53}, {53, 55} };
+uint32_t currentColorBoxesFill[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+byte boxLightOrder[] = {0, 1, 2, 3, 4, 5, 6, 7};
+static byte pixelsInOneBox = 7;
+static byte numberOfBoxes = 8;
+uint32_t colorBoxesLastRun = 0;
+byte indexOfBoxToFill = 0;
+uint32_t colorBoxesNextChangeInMillis = 1000;
 
 const byte ledsPin = 6;
 const byte ledsNumber = 56;
@@ -48,9 +57,9 @@ DHT_nonblocking dht(dhtPin, DHT_TYPE_22);
 const uint32_t dhtThreadDelayInMillis = 30000;
 uint32_t dhtThreadLastRun = 0;
 
-#define HA_REMOTE_LEDDST_LOOP_DEBUG 1
+#define HA_REMOTE_LEDDST_LOOP_DEBUG 0
 #define HA_REMOTE_LEDDST_NRF_DEBUG 0
-#define HA_REMOTE_LEDDST_LEDS_DEBUG 1
+#define HA_REMOTE_LEDDST_LEDS_DEBUG 0
 #define HA_REMOTE_LEDDST_DHT_DEBUG 0
 
 void setup(void)
@@ -65,12 +74,13 @@ void setup(void)
 #if HA_REMOTE_LEDDST_LOOP_DEBUG || HA_REMOTE_LEDDST_NRF_DEBUG || HA_REMOTE_LEDDST_LEDS_DEBUG || HA_REMOTE_LEDDST_DHT_DEBUG
   printf("Free RAM: %d B\n\r", freeRam()); 
 #endif  
+  randomSeed(analogRead(0));
   response[4] = 2;
   response[5] = 0;
-  response[6] = 64;
-  response[7] = 64;
-  response[8] = 3;
-  response[9] = 255;
+  response[6] = 44;
+  response[7] = 44;
+  response[8] = 5;
+  response[9] = 180;
 }
 
 void setupRF(void)
@@ -112,7 +122,7 @@ void loop()
     printf("LEDs: %ld \n\r", ledsThreadLastRun); 
 #endif
   }   
-  if (hasDhtIntervalGone())
+  /*if (hasDhtIntervalGone())
   {
     if (dhtCallback())
     {
@@ -121,7 +131,7 @@ void loop()
       printf("DHT: %ld \n\r", dhtThreadLastRun); 
 #endif
     }
-  }      
+  } */     
 }
 
 
@@ -148,7 +158,7 @@ void checkForCommandArrived()
     }
     printf("}\n\r");
 #endif 
-    if (command[1] == 3)//TYPE-RemoteLEDDST
+    if (command[1] == 4)//TYPE-RemoteLEDDST
     {
       for (byte i = 0; i < 4; i++)
       {
@@ -252,6 +262,14 @@ void ledsCallback()
         uint32_t colorToSet = strip.Color((response[9]*response[6])/255,(response[9]*response[7])/255,(response[9]*response[8])/255);
         knightRider(colorToSet);
       }
+      else if (response[5] == 3) //Random Color Boxes
+      {
+#if HA_REMOTE_LEDDST_LEDS_DEBUG
+      printf("Random Color Boxes\n\r");
+#endif
+        colorBoxes();
+        
+      }
     }
     else if (response[4] == 2) //Set Color
     {      
@@ -296,11 +314,11 @@ uint32_t Wheel(byte WheelPos)
 }
 
 // Fill the dots one after the other with a color
-void colorWipe(uint32_t c, byte currentDayIndex) 
+void colorWipe(uint32_t c, int8_t currentDayIndex) 
 {
   byte startCurrentDayIndex;
   byte endCurrentDayIndex;
-  if (currentDayIndex >= 0)
+  if (currentDayIndex >= 0 && currentDayIndex < arr_len(currentDayLeds))
   {
     startCurrentDayIndex = currentDayLeds[currentDayIndex][0];
     endCurrentDayIndex = currentDayLeds[currentDayIndex][1];
@@ -313,7 +331,7 @@ void colorWipe(uint32_t c, byte currentDayIndex)
   for(uint16_t i=0; i<strip.numPixels(); i++) 
   {
       if (i >= startCurrentDayIndex && i <= endCurrentDayIndex)
-        strip.setPixelColor(i, 255, 0, 0);
+        strip.setPixelColor(i, (response[9]*255)/255, 0, 0);
       else
         strip.setPixelColor(i, c);           
   }
@@ -355,6 +373,44 @@ void knightRider(uint32_t color)
       knightRiderCurrentPixel = 0;
       knightRiderDirection = -knightRiderDirection;
     }           
+  }
+}
+
+void colorBoxes()
+{
+  if (hasIntervalGone(colorBoxesLastRun, colorBoxesNextChangeInMillis))
+  {
+#if HA_REMOTE_LEDDST_LEDS_DEBUG
+      printf("Index Of Box To Fill - %d\n\r", indexOfBoxToFill);
+#endif
+    if (indexOfBoxToFill == numberOfBoxes)
+      indexOfBoxToFill = 0;
+    if (indexOfBoxToFill == 0)
+    {
+      for (int i=0; i < numberOfBoxes; i++)
+      {
+        long r = random(i, numberOfBoxes); 
+        int temp = boxLightOrder[i];
+        boxLightOrder[i] = boxLightOrder[r];
+        boxLightOrder[r] = temp;
+      }
+      for (int i = 0; i < numberOfBoxes; i++)
+      {
+        currentColorBoxesFill[i] = 0;
+      }
+      colorWipe(0, -1);
+    }
+    currentColorBoxesFill[boxLightOrder[indexOfBoxToFill]] = Wheel(random(1, 255));    
+
+    for(uint16_t i=0; i<strip.numPixels(); i++) 
+    {
+      int boxIndex = i / pixelsInOneBox;
+      strip.setPixelColor(i, currentColorBoxesFill[boxIndex]);                 
+    }
+    strip.show();
+    
+    indexOfBoxToFill++;
+    colorBoxesLastRun = millis();
   }
 }
 
