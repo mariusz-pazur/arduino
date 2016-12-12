@@ -28,10 +28,11 @@ static byte currentDayLeds[][2] = { {0, 2}, {2, 4}, {4, 6},
                                    {7, 9}, {9, 11}, {11, 13},
                                    {14, 16}, {16, 18}, {18, 20},
                                    {21, 23}, {23, 25}, {25, 27},
-                                   {28, 30}, {30, 32}, {32, 34},
-                                   {35, 37}, {37, 39}, {39, 41},
-                                   {42, 44}, {44, 46}, {46, 48},
-                                   {49, 51}, {51, 53}, {53, 55} };
+                                   {53, 55}, {51, 53}, {49, 51},
+                                   {46, 48}, {44, 46}, {42, 44},
+                                   {39, 41}, {37, 39}, {35, 37},
+                                   {32, 34}, {30, 32}, {28, 30}
+                                  };
 uint32_t currentColorBoxesFill[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 byte boxLightOrder[] = {0, 1, 2, 3, 4, 5, 6, 7};
 static byte pixelsInOneBox = 7;
@@ -381,35 +382,39 @@ void colorBoxes()
   if (hasIntervalGone(colorBoxesLastRun, colorBoxesNextChangeInMillis))
   {
 #if HA_REMOTE_LEDDST_LEDS_DEBUG
-      printf("Index Of Box To Fill - %d\n\r", indexOfBoxToFill);
+    printf("Index Of Box To Fill - %d\n\r", indexOfBoxToFill);
 #endif
     if (indexOfBoxToFill == numberOfBoxes)
-      indexOfBoxToFill = 0;
-    if (indexOfBoxToFill == 0)
     {
-      for (int i=0; i < numberOfBoxes; i++)
-      {
-        long r = random(i, numberOfBoxes); 
-        int temp = boxLightOrder[i];
-        boxLightOrder[i] = boxLightOrder[r];
-        boxLightOrder[r] = temp;
-      }
-      for (int i = 0; i < numberOfBoxes; i++)
-      {
-        currentColorBoxesFill[i] = 0;
-      }
       colorWipe(0, -1);
+      indexOfBoxToFill = 0;
     }
-    currentColorBoxesFill[boxLightOrder[indexOfBoxToFill]] = Wheel(random(1, 255));    
-
-    for(uint16_t i=0; i<strip.numPixels(); i++) 
+    else
     {
-      int boxIndex = i / pixelsInOneBox;
-      strip.setPixelColor(i, currentColorBoxesFill[boxIndex]);                 
+      if (indexOfBoxToFill == 0)
+      {
+        for (int i=0; i < numberOfBoxes; i++)
+        {
+          long r = random(i, numberOfBoxes); 
+          int temp = boxLightOrder[i];
+          boxLightOrder[i] = boxLightOrder[r];
+          boxLightOrder[r] = temp;
+        }
+        for (int i = 0; i < numberOfBoxes; i++)
+        {
+          currentColorBoxesFill[i] = 0;
+        }      
+      }
+      currentColorBoxesFill[boxLightOrder[indexOfBoxToFill]] = Wheel(random(1, 255));    
+  
+      for(uint16_t i=0; i<strip.numPixels(); i++) 
+      {
+        int boxIndex = i / pixelsInOneBox;
+        strip.setPixelColor(i, currentColorBoxesFill[boxIndex]);                 
+      }
+      strip.show();      
+      indexOfBoxToFill++;
     }
-    strip.show();
-    
-    indexOfBoxToFill++;
     colorBoxesLastRun = millis();
   }
 }
