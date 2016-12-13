@@ -56,14 +56,14 @@ struct Song {
 };
 static Song songs[] = 
 {    
-    { { 'c', 'd', 'f', 'd', 'a', ' ', 'a', 'g', ' ', 'c', 'd', 'f', 'd', 'g', ' ', 'g', 'f', ' ', 'X' }, {1, 1, 1, 1, 1, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 4, 4, 2}, 18, 100 }      
+    { { 'c', 'd', 'f', 'd', 'a', ' ', 'a', 'g', ' ', 'c', 'd', 'f', 'd', 'g', ' ', 'g', 'f', ' ', 'X' }, {1, 1, 1, 1, 1, 1, 4, 4, 2, 1, 1, 1, 1, 1, 1, 4, 4, 2}, 18, 400 }      
 };
 
 #define HA_REMOTE_LEDDHTBUZZ_LOOP_DEBUG 0
-#define HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG 1
-#define HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG 1
-#define HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG 1
-#define HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG 1
+#define HA_REMOTE_LEDDHTBUZZ_NRF_DEBUG 0
+#define HA_REMOTE_LEDDHTBUZZ_LEDS_DEBUG 0
+#define HA_REMOTE_LEDDHTBUZZ_DHT_DEBUG 0
+#define HA_REMOTE_LEDDHTBUZZ_BUZZER_DEBUG 0
 
 void setup(void)
 {  
@@ -312,7 +312,7 @@ void countingLeds(byte timeInMinutes, byte colorR, byte colorG, byte colorB)
   strip.show(); 
   if (numberOfPixelsToShow == 0)
   {
-    //response[14] = 1;
+    response[14] = 1;
     response[4] = 0; 
   }
 }
