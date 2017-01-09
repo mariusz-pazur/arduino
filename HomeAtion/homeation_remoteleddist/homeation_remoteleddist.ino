@@ -1,3 +1,4 @@
+#include <RCSwitch.h>
 #include <SPI.h>
 #include <Mirf.h>
 #include <nRF24L01.h>
@@ -53,26 +54,39 @@ uint32_t old_val[ledsNumber];
 int8_t knightRiderCurrentPixel = 0;
 int8_t knightRiderDirection = 1;
 
-const byte dhtPin = 2;
+const byte dhtPin = 4;
 DHT_nonblocking dht(dhtPin, DHT_TYPE_22);
-const uint32_t dhtThreadDelayInMillis = 30000;
+const uint32_t dhtThreadDelayInMillis = 10000;
 uint32_t dhtThreadLastRun = 0;
+
+RCSwitch mySwitch = RCSwitch();
+uint32_t rf433ThreadLastRun = 0;
+const uint32_t rf433ThreadDelayInMillis = 2;
+
+const byte touchPin = 3;
+boolean touchCurrentState = LOW;
+boolean touchLastState = LOW;
+uint8_t touchCounter = 0;
+uint32_t touchThreadLastRun = 0;
+const uint32_t touchThreadDelayInMillis = 2;
 
 #define HA_REMOTE_LEDDST_LOOP_DEBUG 0
 #define HA_REMOTE_LEDDST_NRF_DEBUG 0
 #define HA_REMOTE_LEDDST_LEDS_DEBUG 0
 #define HA_REMOTE_LEDDST_DHT_DEBUG 0
+#define HA_REMOTE_LEDDST_RF433_DEBUG 0
+#define HA_REMOTE_LEDDST_TOUCH_DEBUG 0
 
 void setup(void)
 {
-#if HA_REMOTE_LEDDST_LOOP_DEBUG || HA_REMOTE_LEDDST_NRF_DEBUG || HA_REMOTE_LEDDST_LEDS_DEBUG || HA_REMOTE_LEDDST_DHT_DEBUG
+#if HA_REMOTE_LEDDST_LOOP_DEBUG || HA_REMOTE_LEDDST_NRF_DEBUG || HA_REMOTE_LEDDST_LEDS_DEBUG || HA_REMOTE_LEDDST_DHT_DEBUG || HA_REMOTE_LEDDST_RF433_DEBUG || HA_REMOTE_LEDDST_TOUCH_DEBUG
   Serial.begin(57600);
   printf_begin();
   printf("HomeAtion Remote Led Distance (leds & temp & humidity & distance sensor)\n\r");
 #endif
   setupRF();   
   setupLeds();  
-#if HA_REMOTE_LEDDST_LOOP_DEBUG || HA_REMOTE_LEDDST_NRF_DEBUG || HA_REMOTE_LEDDST_LEDS_DEBUG || HA_REMOTE_LEDDST_DHT_DEBUG
+#if HA_REMOTE_LEDDST_LOOP_DEBUG || HA_REMOTE_LEDDST_NRF_DEBUG || HA_REMOTE_LEDDST_LEDS_DEBUG || HA_REMOTE_LEDDST_DHT_DEBUG || HA_REMOTE_LEDDST_RF433_DEBUG || HA_REMOTE_LEDDST_TOUCH_DEBUG
   printf("Free RAM: %d B\n\r", freeRam()); 
 #endif  
   randomSeed(analogRead(0));
@@ -82,6 +96,8 @@ void setup(void)
   response[7] = 44;
   response[8] = 5;
   response[9] = 180;
+  mySwitch.enableReceive(0);  // Receiver on interrupt 0 - that is pin #2
+  pinMode(touchPin, INPUT);
 }
 
 void setupRF(void)
@@ -123,7 +139,23 @@ void loop()
     printf("LEDs: %ld \n\r", ledsThreadLastRun); 
 #endif
   }   
-  /*if (hasDhtIntervalGone())
+  if (hasRf433IntervalGone())
+  {
+    rf433Callback();
+    rf433ThreadLastRun = millis();
+#if HA_REMOTE_LEDDST_LOOP_DEBUG && HA_REMOTE_LEDDST_RF433_DEBUG
+    printf("RF433: %ld \n\r", rf433ThreadLastRun); 
+#endif
+  }
+  if (hasTouchIntervalGone())
+  {
+    touchCallback();
+    touchThreadLastRun = millis();
+#if HA_REMOTE_LEDDST_LOOP_DEBUG && HA_REMOTE_LEDDST_TOUCH_DEBUG
+    printf("Touch: %ld \n\r", touchThreadLastRun); 
+#endif
+  }
+  if (hasDhtIntervalGone())
   {
     if (dhtCallback())
     {
@@ -132,7 +164,7 @@ void loop()
       printf("DHT: %ld \n\r", dhtThreadLastRun); 
 #endif
     }
-  } */     
+  }    
 }
 
 
@@ -424,6 +456,49 @@ uint32_t dimColor(uint32_t color, uint8_t width)
   return (((color&0xFF0000)/width)&0xFF0000) + (((color&0x00FF00)/width)&0x00FF00) + (((color&0x0000FF)/width)&0x0000FF);
 }
 
+void rf433Callback()
+{
+  if (mySwitch.available()) 
+  { 
+    int value = mySwitch.getReceivedValue();
+ 
+    if (value == 0) 
+    {
+#if HA_REMOTE_LEDDST_RF433_DEBUG
+      printf("Unknown encoding\n\r");
+#endif      
+    } 
+    else 
+    {
+#if HA_REMOTE_LEDDST_RF433_DEBUG
+      printf("Received ");
+      printf("%ld", mySwitch.getReceivedValue() );
+      printf(" / ");
+      printf("%d", mySwitch.getReceivedBitlength() );
+      printf("bit ");
+      printf("Protocol: ");
+      printf("%d", mySwitch.getReceivedProtocol() );
+      printf("\n\r");
+#endif
+    } 
+    mySwitch.resetAvailable(); 
+  }
+}
+
+void touchCallback()
+{
+  touchCurrentState = digitalRead(touchPin);
+  if (touchCurrentState == HIGH && touchLastState == LOW)
+  {
+    touchCounter++;
+    response[14] = touchCounter;
+#if HA_REMOTE_LEDDST_TOUCH_DEBUG
+    printf("Button pressed: %d times\n\r", touchCounter);
+#endif
+  }
+  touchLastState = touchCurrentState;  
+}
+
 bool hasIntervalGone(uint32_t lastRead, uint32_t millisBetweenReads)
 {
   return (lastRead + millisBetweenReads) <= millis();
@@ -443,3 +518,15 @@ bool hasDhtIntervalGone()
 {
   return hasIntervalGone(dhtThreadLastRun, dhtThreadDelayInMillis);
 }
+
+bool hasRf433IntervalGone()
+{
+  return hasIntervalGone(rf433ThreadLastRun, rf433ThreadDelayInMillis);
+}
+
+bool hasTouchIntervalGone()
+{
+  return hasIntervalGone(touchThreadLastRun, touchThreadDelayInMillis);
+}
+
+

@@ -1,0 +1,6 @@
+A-ON-Received 13976916 / sudo /home/pi/433Utils/RPi_utils/codesend 13976916 1 147
+A-OFF-Received 13976913 / sudo /home/pi/433Utils/RPi_utils/codesend 13976913 1 147
+B-ON-Received 13979988 / sudo /home/pi/433Utils/RPi_utils/codesend 13979988 1 147
+B-OFF-Received 13979985 / sudo /home/pi/433Utils/RPi_utils/codesend 13979985 1 147
+C-ON-Received 13980756 / sudo /home/pi/433Utils/RPi_utils/codesend 13980756 1 147
+C-OFF-Received 13980753 / sudo /home/pi/433Utils/RPi_utils/codesend 13980753 1 147
